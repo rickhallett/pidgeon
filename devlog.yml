@@ -259,6 +259,93 @@ decisions:
       should be inferred from the code itself (e.g., does the try/catch exist?),
       not from reading a report that says it was added.
 
+  - id: 019
+    date: 2026-03-29
+    title: Discriminated union over class hierarchy for CarrierError
+    choice: >
+      CarrierErrorCode union type ('AUTH' | 'RATE_LIMIT' | 'NETWORK' | ...)
+      with flat CarrierError object, not a class hierarchy.
+    alternatives:
+      - Class hierarchy (CarrierAuthError extends CarrierError) as spec prescribes
+      - Tagged union classes (hybrid — classes with a discriminant field)
+    rationale: >
+      The spec says "Custom error classes internally (CarrierAuthError,
+      CarrierRateLimitError, ...) — all extend CarrierError." This is a
+      Java/C#-influenced pattern. In TypeScript, discriminated unions are
+      idiomatic and superior for this use case:
+      (1) Exhaustiveness checking — switch on error.code gets compile-time
+      completeness. Class hierarchies require instanceof chains that the
+      compiler cannot check for exhaustiveness.
+      (2) Serialisation — plain objects survive JSON.stringify/parse.
+      Class instances lose their prototype chain across process boundaries
+      (HTTP responses, message queues, logs). A shipping service crosses
+      these boundaries constantly.
+      (3) No runtime overhead — no prototype chain, no constructor calls,
+      no instanceof gotchas across package boundaries.
+      (4) Result<T, CarrierError> composes cleanly — the error is data,
+      not an exception. This aligns with the spec's own Result<T> boundary
+      requirement.
+      The spec's intent — programmatic distinction of error categories —
+      is fully met by switching on error.code rather than using instanceof.
+    spec_divergence: >
+      Deliberate. The spec's class hierarchy requirement is superseded by
+      the TypeScript-idiomatic equivalent. The external contract (Result<T>
+      with structured error) matches the spec. The internal representation
+      differs but achieves the same distinguishability.
+
+  - id: 020
+    date: 2026-03-29
+    title: Domain types derived from Zod schemas via z.infer
+    choice: >
+      Address, Weight, Dimensions, Package, RateRequest types are
+      z.infer<typeof Schema> re-exports, not hand-written interfaces.
+    alternatives:
+      - Hand-written types alongside independent Zod schemas (drift risk)
+      - No Zod schemas — TypeScript types only (no runtime validation)
+    rationale: >
+      Three independent reviews (Gemini, Claude, Codex) flagged the gap
+      between "Zod for all runtime validation" and the reality of plain
+      TypeScript types with no schemas. The initial fix added schemas but
+      kept types hand-written — creating a dual source of truth that could
+      silently drift. Deriving types from schemas via z.infer eliminates
+      this class of bug entirely: add a field to the schema and the type
+      updates automatically. The readonly constraint is preserved via
+      Zod's .readonly() chain on array fields.
+    exception: >
+      RateQuote, Surcharge, CarrierError, Logger, and CarrierProvider
+      remain hand-written. These are output/internal types that are not
+      validated at service boundaries — Zod schemas would add ceremony
+      without value. The rule is: types that cross a trust boundary
+      (external input) get schemas; types that flow internally do not.
+
+  - id: 021
+    date: 2026-03-29
+    title: Config defaults — single source via Zod, not constructor fallbacks
+    choice: >
+      Zod schema defaults in config.ts are the authoritative source.
+      UpsRateProvider constructor uses ?? fallbacks only as a safety net
+      for direct-construction callers who bypass loadUpsConfig().
+    alternatives:
+      - Remove constructor fallbacks entirely (breaks direct construction in tests)
+      - Remove Zod defaults (forces callers to specify every optional field)
+    rationale: >
+      Gemini review flagged duplication between Zod .default(4) in config.ts
+      and ?? 4 in rate.ts constructor. Both exist because there are two
+      construction paths: (1) loadUpsConfig() → Zod fills defaults → full
+      config passed to constructor, (2) direct new UpsRateProvider() in
+      tests with partial config → constructor fills defaults. The Zod
+      defaults are authoritative for production. The constructor fallbacks
+      are identical values serving as a safety net — not an independent
+      source of truth. This duplication is a known trade-off: removing
+      constructor defaults would force every test to go through loadUpsConfig()
+      or spell out every config field. Documenting rather than eliminating.
+    risk: >
+      If a default value changes, both locations must be updated. No
+      compile-time check catches the mismatch. Mitigated by: the config
+      test suite validates Zod defaults, and the rate test suite exercises
+      the constructor defaults indirectly. A mismatch would surface as
+      different behavior between "loaded from env" and "constructed in test."
+
 deferred:
 
   - id: D001
@@ -279,25 +366,21 @@ deferred:
 
   - id: D002
     date: 2026-03-29
+    resolved: 2026-03-29
     title: Rating 401 should reacquire token and retry once
-    status: deferred
-    defer_to: design decision
+    status: resolved
     source:
       - codex
-    open_question: >
-      Does transparent auth refresh include a one-time retry when the rating
-      endpoint returns 401 after token acquisition?
-    rationale: >
-      This is not deferred as low-value cleanup; it requires an explicit product
-      decision. The PRD says token refresh should be transparent to callers, but
-      the current implementation treats 401 from the rating endpoint as terminal
-      (clears cache, returns error). Adding a one-time reacquire-and-retry path
-      would satisfy the PRD requirement but conflates auth retry with HTTP retry —
-      two different concerns with different retry semantics. Current retry tests
-      intentionally assert that 401 is never retried until this behavior is specified.
-    follow_up_trigger: >
-      Resolve before closing HTTP retry/auth integration work. If yes, implement
-      as a focused change with its own test — not folded into the HTTP retry loop.
+    resolution: >
+      Implemented. On rating 401, the provider invalidates the cached token
+      and calls executeWithToken(request, true) — which acquires a fresh token
+      and starts a full request cycle (including transient-error retries).
+      The isAuthRetry flag prevents infinite recursion: a second 401 goes
+      through handleHttpError and returns immediately. This means auth retry
+      is not strictly "retry once" — it's "retry with fresh auth, including
+      up to maxAttempts for transient errors in the retry cycle." This is
+      documented in a code comment and tested for 401→401, 401→500→success,
+      and 401→success paths. See decision 019 for related error type choices.
 
   - id: D003
     date: 2026-03-29
@@ -358,18 +441,21 @@ deferred:
 
   - id: D007
     date: 2026-03-29
+    resolved: 2026-03-29
     title: Structured carrier error types at the provider boundary
-    status: deferred
-    defer_to: future
+    status: resolved
     source:
       - gemini
       - carried
-    rationale: >
-      The current boundary contract is Result<T> with string errors. Moving to
-      structured error payloads is a larger API decision and should be handled
-      deliberately rather than folded into the current implementation steps.
-    follow_up_trigger: >
-      Revisit when evolving the public error contract beyond string messages.
+    resolution: >
+      Implemented as CarrierError type with code (discriminated union),
+      message, carrier, and retriable fields. Result<T, E> is now generic
+      over error type (default E=string for backward compatibility).
+      CarrierResult<T> = Result<T, CarrierError> used by CarrierProvider.
+      All UPS error returns classified by code with retriable flag.
+      Registry and config retain string errors via the default type parameter.
+      See decision 019 for why this uses a discriminated union rather than
+      the spec's class hierarchy.
 
   - id: D008
     date: 2026-03-29
@@ -464,3 +550,26 @@ deferred:
     follow_up_trigger: >
       Revisit if config validation bugs surface or if Zod schema changes
       introduce regressions in rejection paths.
+
+  - id: D014
+    date: 2026-03-29
+    title: Extract the shared HTTP layer into @pidgeon/core
+    status: deferred
+    defer_to: next architectural pass
+    source:
+      - spec/prd fresh review
+      - carried review oversight
+    rationale: >
+      The spec assigns the HTTP layer to @pidgeon/core, including retry,
+      timeout handling, 429 handling, and structured HTTP/network error
+      mapping. The current implementation keeps all of that behavior inside
+      packages/carrier-ups/src/rate.ts. This was missed across multiple review
+      layers because the UPS implementation is functionally correct for the
+      current single-carrier slice, but it remains off-spec on a central
+      architectural boundary. If left in place, the next carrier or next UPS
+      operation will either duplicate transport logic or force a late
+      refactor of working code.
+    follow_up_trigger: >
+      Address before adding a second carrier or a second carrier operation.
+      Treat as architectural debt against an explicit spec requirement, not
+      optional cleanup.
