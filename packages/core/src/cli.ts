@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { z } from "zod";
 import type { CarrierProvider, RateRequest } from "./index.js";
 
 export type ProgramDeps = {
@@ -35,21 +36,26 @@ export function createProgram(deps: ProgramDeps): Command {
     .requiredOption("--dim-unit <unit>", "Dimension unit (in, cm)")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
-      const weight = Number(opts.weight);
-      const length = Number(opts.length);
-      const width = Number(opts.width);
-      const height = Number(opts.height);
+      const CliNumericSchema = z.coerce.number().positive();
+      const parsed = z.object({
+        weight: CliNumericSchema,
+        length: CliNumericSchema,
+        width: CliNumericSchema,
+        height: CliNumericSchema,
+      }).safeParse({
+        weight: opts.weight,
+        length: opts.length,
+        width: opts.width,
+        height: opts.height,
+      });
 
-      const errors: string[] = [];
-      if (!Number.isFinite(weight) || weight <= 0) errors.push("--weight must be a positive number");
-      if (!Number.isFinite(length) || length <= 0) errors.push("--length must be a positive number");
-      if (!Number.isFinite(width) || width <= 0) errors.push("--width must be a positive number");
-      if (!Number.isFinite(height) || height <= 0) errors.push("--height must be a positive number");
-
-      if (errors.length > 0) {
+      if (!parsed.success) {
+        const errors = parsed.error.issues.map((issue) => `--${issue.path[0]} must be a positive number`);
         deps.write(`Error: ${errors.join("; ")}`);
         return;
       }
+
+      const { weight, length, width, height } = parsed.data;
 
       const request: RateRequest = {
         origin: {
