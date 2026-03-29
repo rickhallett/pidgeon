@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@pidgeon/core": "workspace:*"
+    "@pidgeon/core": "workspace:*",
+    "zod": "^4.3.6"
   }
 }
