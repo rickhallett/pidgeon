@@ -246,3 +246,20 @@ decisions:
       Operator review of request-builder.test.ts after triage T1-T5 implementation.
       Test count went from 11 to 9 (removed 2 upstream-coupled tests, consolidated
       structural checks). All 26 tests green.
+
+  - id: 018
+    date: 2026-03-29
+    title: Independent adversarial reviews — no cross-reading
+    choice: Each adversarial review is conducted independently from the code, not from prior reports
+    alternatives:
+      - Read all prior reviews and track resolution status across them
+      - Read only same-model prior reviews
+    rationale: >
+      Reading prior reviews introduces anchoring bias — the reviewer fixates on
+      what was already found instead of discovering issues from first principles.
+      Cross-family reviews (Evidence Hierarchy rank 4) lose their value if one
+      reviewer's findings are shaped by another's. A finding that two independent
+      reviewers discover separately is stronger evidence than one finding
+      propagated through review reports. Resolution status of prior findings
+      should be inferred from the code itself (e.g., does the try/catch exist?),
+      not from reading a report that says it was added.

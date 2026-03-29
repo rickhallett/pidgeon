@@ -78,6 +78,7 @@ Severity levels:
 - Do not soften findings. A CRITICAL is a CRITICAL.
 - Do not review style or formatting (that's the clean-code agent's job).
 - Do not generate findings to fill a quota. If the code is solid, say "no findings" — that itself is a meaningful signal.
+- **Do not read prior review reports** (`docs/reviews/*.md`). Conduct your review independently from the code and tests alone. Reading prior reviews introduces anchoring bias. If two independent reviewers find the same issue, that's stronger evidence than one finding propagated through reports. Infer resolution status from the code itself, not from prior reports.
 
 ## LLM-Specific Checks
 
