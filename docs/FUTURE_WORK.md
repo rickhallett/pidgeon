@@ -10,15 +10,8 @@ Items are grouped by theme. Priority reflects consensus across reviewers.
 
 ## Architecture
 
-### Extract HTTP transport to @pidgeon/core
-**Priority:** HIGH (before adding a second carrier)
-
-The spec assigns the HTTP layer (retry, backoff, timeout, 429 handling, structured
-error mapping) to `@pidgeon/core`. Currently all transport logic lives inside
-`packages/carrier-ups/src/rate.ts`. Adding a second carrier or a second UPS
-operation will either duplicate transport logic or force a late refactor.
-
-**See:** devlog D014
+### ~~Extract HTTP transport to @pidgeon/core~~ DONE
+Extracted to `packages/core/src/http.ts`. UPS provider refactored to use it.
 
 ### Config defaults duplication
 **Priority:** LOW

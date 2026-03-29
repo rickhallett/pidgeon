@@ -553,23 +553,17 @@ deferred:
 
   - id: D014
     date: 2026-03-29
+    resolved: 2026-03-29
     title: Extract the shared HTTP layer into @pidgeon/core
-    status: deferred
-    defer_to: next architectural pass
+    status: resolved
     source:
       - spec/prd fresh review
       - carried review oversight
-    rationale: >
-      The spec assigns the HTTP layer to @pidgeon/core, including retry,
-      timeout handling, 429 handling, and structured HTTP/network error
-      mapping. The current implementation keeps all of that behavior inside
-      packages/carrier-ups/src/rate.ts. This was missed across multiple review
-      layers because the UPS implementation is functionally correct for the
-      current single-carrier slice, but it remains off-spec on a central
-      architectural boundary. If left in place, the next carrier or next UPS
-      operation will either duplicate transport logic or force a late
-      refactor of working code.
-    follow_up_trigger: >
-      Address before adding a second carrier or a second carrier operation.
-      Treat as architectural debt against an explicit spec requirement, not
-      optional cleanup.
+    resolution: >
+      Implemented in step 12. Created packages/core/src/http.ts with
+      httpRequest() function encapsulating retry, backoff, timeout, 429
+      Retry-After, structured error mapping, and Logger integration.
+      ErrorBodyParser callback allows carrier-specific error extraction.
+      UPS rate provider refactored to delegate HTTP to core, keeping only
+      carrier-specific auth, request building, and response parsing.
+      rate.ts went from 468 lines to ~280 lines (132 lines removed).
