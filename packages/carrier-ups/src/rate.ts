@@ -8,9 +8,24 @@ type UpsCredentials = {
 
 export type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+type RetryConfig = {
+  readonly maxAttempts: number;
+  readonly baseDelayMs: number;
+  readonly timeoutMs: number;
+  readonly maxRetryAfterSeconds: number;
+};
+
+type UrlConfig = {
+  readonly rating: string;
+  readonly token: string;
+};
+
 type UpsRateProviderConfig = {
   readonly fetch: FetchFn;
   readonly credentials: UpsCredentials;
+  readonly retry?: RetryConfig;
+  readonly urls?: UrlConfig;
+  readonly tokenExpiryBufferSeconds?: number;
 };
 
 export class UpsRateProvider {
@@ -25,10 +40,7 @@ export class UpsRateProvider {
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    const maxAttempts = 4;
-    const baseDelayMs = 200;
-    const timeoutMs = 3_000;
-    const maxRetryAfterSeconds = 5;
+    const { maxAttempts = 4, baseDelayMs = 200, timeoutMs = 3_000, maxRetryAfterSeconds = 5 } = this.config.retry ?? {};
     let lastResult: Result<RateQuote[]> | null = null;
     let retryAfterMs = 0;
 
@@ -45,7 +57,7 @@ export class UpsRateProvider {
       let response: Response;
       try {
         response = await Promise.race([
-          this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
+          this.config.fetch(this.config.urls?.rating ?? "https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -216,7 +228,7 @@ export class UpsRateProvider {
 
     let response: Response;
     try {
-      response = await this.config.fetch("https://onlinetools.ups.com/security/v1/oauth/token", {
+      response = await this.config.fetch(this.config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token", {
         method: "POST",
         headers: {
           "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
@@ -249,7 +261,7 @@ export class UpsRateProvider {
     const expiresIn = typeof rawExpiry === "number" ? rawExpiry : parseInt(String(rawExpiry), 10) || 0;
     this.cachedToken = {
       accessToken,
-      expiresAt: Date.now() + Math.max(0, expiresIn - 60) * 1000,
+      expiresAt: Date.now() + Math.max(0, expiresIn - (this.config.tokenExpiryBufferSeconds ?? 60)) * 1000,
     };
 
     return { ok: true, data: accessToken };
