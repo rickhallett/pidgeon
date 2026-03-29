@@ -49,13 +49,26 @@ function makeProvider(fakeFetch: FetchFn): UpsRateProvider {
   });
 }
 
+/** Wraps a rating-only stub so the token endpoint always succeeds. */
+function withAuth(ratingFetch: FetchFn): FetchFn {
+  return async (input, init) => {
+    if (String(input).includes("/oauth/token")) {
+      return new Response(
+        JSON.stringify({ access_token: "test-token", token_type: "Bearer", expires_in: 14399 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return ratingFetch(input, init);
+  };
+}
+
 // --- 1. Network failures ---
 
 describe("error paths: network failures", () => {
   it("returns error when fetch rejects with a network error", async () => {
-    const provider = makeProvider(async () => {
+    const provider = makeProvider(withAuth(async () => {
       throw new TypeError("fetch failed");
-    });
+    }));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -65,9 +78,9 @@ describe("error paths: network failures", () => {
   });
 
   it("returns error when fetch rejects with DNS resolution failure", async () => {
-    const provider = makeProvider(async () => {
+    const provider = makeProvider(withAuth(async () => {
       throw new TypeError("getaddrinfo ENOTFOUND onlinetools.ups.com");
-    });
+    }));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -77,9 +90,9 @@ describe("error paths: network failures", () => {
   });
 
   it("returns error when request times out", async () => {
-    const provider = makeProvider(async () => {
+    const provider = makeProvider(withAuth(async () => {
       throw new DOMException("The operation was aborted", "AbortError");
-    });
+    }));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -105,12 +118,12 @@ describe("error paths: HTTP error responses", () => {
       },
     };
 
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(JSON.stringify(upsError), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -121,12 +134,12 @@ describe("error paths: HTTP error responses", () => {
   });
 
   it("returns auth error on 401 Unauthorized", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(JSON.stringify({ response: { errors: [{ code: "250003", message: "Invalid Access Token" }] } }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -136,12 +149,12 @@ describe("error paths: HTTP error responses", () => {
   });
 
   it("returns error on 403 Forbidden", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(JSON.stringify({ response: { errors: [{ code: "250002", message: "Blocked Merchant" }] } }), {
         status: 403,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -151,7 +164,7 @@ describe("error paths: HTTP error responses", () => {
   });
 
   it("returns rate-limit error on 429 with retriable hint", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(JSON.stringify({ response: { errors: [{ code: "429", message: "Rate limit exceeded" }] } }), {
         status: 429,
         headers: {
@@ -159,7 +172,7 @@ describe("error paths: HTTP error responses", () => {
           "Retry-After": "30",
         },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -169,12 +182,12 @@ describe("error paths: HTTP error responses", () => {
   });
 
   it("returns error on 500 Internal Server Error", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response("Internal Server Error", {
         status: 500,
         headers: { "Content-Type": "text/plain" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -184,12 +197,12 @@ describe("error paths: HTTP error responses", () => {
   });
 
   it("returns error on 503 Service Unavailable", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response("Service Unavailable", {
         status: 503,
         headers: { "Content-Type": "text/plain" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -203,12 +216,12 @@ describe("error paths: HTTP error responses", () => {
 
 describe("error paths: malformed responses", () => {
   it("returns error when response body is not valid JSON", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response("<html>Bad Gateway</html>", {
         status: 200,
         headers: { "Content-Type": "text/html" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -218,12 +231,12 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error when response is valid JSON but empty object", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(JSON.stringify({}), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -233,7 +246,7 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error when RatedShipment is missing from response", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(
         JSON.stringify({
           RateResponse: {
@@ -243,7 +256,7 @@ describe("error paths: malformed responses", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -253,7 +266,7 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error when TotalCharges.MonetaryValue is not a parseable number", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(
         JSON.stringify({
           RateResponse: {
@@ -276,7 +289,7 @@ describe("error paths: malformed responses", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -286,7 +299,7 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error when shipment element is missing TimeInTransit", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(
         JSON.stringify({
           RateResponse: {
@@ -303,7 +316,7 @@ describe("error paths: malformed responses", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -313,12 +326,12 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error on 400 with HTML body", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response("<html>Bad Request</html>", {
         status: 400,
         headers: { "Content-Type": "text/html" },
       }),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
@@ -328,7 +341,7 @@ describe("error paths: malformed responses", () => {
   });
 
   it("returns error when surcharge MonetaryValue is unparseable", async () => {
-    const provider = makeProvider(async () =>
+    const provider = makeProvider(withAuth(async () =>
       new Response(
         JSON.stringify({
           RateResponse: {
@@ -362,7 +375,7 @@ describe("error paths: malformed responses", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
-    );
+    ));
 
     const result = await provider.getRates(DOMESTIC_REQUEST);
 

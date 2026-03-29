@@ -60,11 +60,16 @@ const UPS_RATE_RESPONSE = {
 describe("walking skeleton", () => {
   it("returns a normalised rate quote for a domestic UPS Ground shipment", async () => {
     // Arrange — stub fetch to return realistic UPS response
-    const fakeFetch: FetchFn = async (_input, _init) =>
-      new Response(JSON.stringify(UPS_RATE_RESPONSE), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+    const fakeFetch: FetchFn = async (input, _init) => {
+      if (String(input).includes("/oauth/token")) {
+        return new Response(JSON.stringify({ access_token: "test-token", token_type: "Bearer", expires_in: 14399 }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(UPS_RATE_RESPONSE), {
+        status: 200, headers: { "Content-Type": "application/json" },
       });
+    };
 
     const provider = new UpsRateProvider({
       fetch: fakeFetch,

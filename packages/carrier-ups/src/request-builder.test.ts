@@ -40,10 +40,21 @@ type CapturedRequest = {
   body: Record<string, unknown> | null;
 };
 
+const TOKEN_RESPONSE = {
+  access_token: "test-token",
+  token_type: "Bearer",
+  expires_in: 14399,
+};
+
 function capturingFetch(): { fetch: FetchFn; captured: () => CapturedRequest } {
   let captured: CapturedRequest | null = null;
 
   const fakeFetch: FetchFn = async (input, init) => {
+    if (String(input).includes("/oauth/token")) {
+      return new Response(JSON.stringify(TOKEN_RESPONSE), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      });
+    }
     const bodyStr = typeof init?.body === "string" ? init.body : "";
     let body: Record<string, unknown> | null = null;
     try { body = JSON.parse(bodyStr); } catch { /* empty or non-JSON body */ }
