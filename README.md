@@ -98,10 +98,9 @@ Outside-in TDD methodology: walking skeleton first, then deepened layer by layer
 - Commander-based CLI with `rate` subcommand
 - Multi-carrier registry with defensive aggregation
 
-**Deferred (documented in [`devlog.yml`](devlog.yml)):**
+**Deferred (see [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md) for full list):**
 
 - Additional carriers (FedEx, USPS, DHL)
 - Additional operations (label purchase, tracking, address validation)
 - Proactive client-side rate limiting (token bucket)
 - Redis-backed token cache for multi-instance deployments
-- Shared HTTP transport layer extracted to core
