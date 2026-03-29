@@ -1,13 +1,13 @@
-import { RateRequestSchema } from "@pidgeon/core";
-import type { Address, CarrierError, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote } from "@pidgeon/core";
+import { RateRequestSchema, httpRequest } from "@pidgeon/core";
+import type { Address, CarrierError, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
+
+export type { FetchFn } from "@pidgeon/core";
 
 type UpsCredentials = {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly accountNumber: string;
 };
-
-export type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 type RetryConfig = {
   readonly maxAttempts: number;
@@ -33,6 +33,15 @@ type UpsRateProviderConfig = {
 function upsError(code: CarrierError['code'], message: string, retriable = false): CarrierError {
   return { code, message, carrier: "UPS", retriable };
 }
+
+const upsErrorBodyParser: ErrorBodyParser = (_status: number, body: unknown): string | null => {
+  const envelope = body as UpsErrorEnvelope | null;
+  const errors = envelope?.response?.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    return errors.map((e) => `${e.code}: ${e.message}`).join("; ");
+  }
+  return null;
+};
 
 export class UpsRateProvider {
   private readonly fetchFn: FetchFn;
@@ -74,141 +83,45 @@ export class UpsRateProvider {
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    let lastResult: CarrierResult<RateQuote[]> | null = null;
-    let retryAfterMs = 0;
+    const requestBody = this.buildRequestBody(request);
 
-    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
-      if (attempt > 0) {
-        const backoff = this.baseDelayMs * Math.pow(2, attempt - 1);
-        await new Promise((r) => setTimeout(r, Math.max(backoff, retryAfterMs)));
-        retryAfterMs = 0;
+    const clientConfig: import("@pidgeon/core").HttpClientConfig = {
+      fetch: this.fetchFn,
+      maxAttempts: this.maxAttempts,
+      baseDelayMs: this.baseDelayMs,
+      timeoutMs: this.timeoutMs,
+      maxRetryAfterSeconds: this.maxRetryAfterSeconds,
+      ...(this.logger !== undefined ? { logger: this.logger } : {}),
+    };
+
+    const result = await httpRequest(
+      clientConfig,
+      {
+        url: this.ratingUrl,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenResult.data}`,
+        },
+        body: JSON.stringify(requestBody),
+        carrier: "UPS",
+      },
+      upsErrorBodyParser,
+    );
+
+    if (!result.ok) {
+      if (result.error.code === "AUTH" && !isAuthRetry) {
+        this.cachedToken = null;
+        return this.executeWithToken(request, true);
       }
-
-      const requestBody = this.buildRequestBody(request);
-      this.logger?.info("rating request", { url: this.ratingUrl, attempt });
-      this.logger?.debug("request payload", { body: requestBody });
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-      let response: Response;
-      try {
-        response = await Promise.race([
-          this.fetchFn(this.ratingUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${tokenResult.data}`,
-            },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal,
-          }),
-          new Promise<never>((_, reject) => {
-            controller.signal.addEventListener("abort", () => {
-              reject(new DOMException("The operation was aborted", "AbortError"));
-            });
-          }),
-        ]);
-        clearTimeout(timeoutId);
-      } catch (error: unknown) {
-        clearTimeout(timeoutId);
-        if (error instanceof DOMException && error.name === "AbortError") {
-          lastResult = { ok: false, error: upsError("TIMEOUT", "Request timeout", true) };
-          continue;
-        }
-        lastResult = { ok: false, error: upsError("NETWORK", `network error: ${error instanceof Error ? error.message : String(error)}`, true) };
-        continue;
-      }
-
-      if (!response.ok) {
-        const status = response.status;
-
-        // On 401 with a non-retried auth: invalidate cached token and start
-        // a fresh request cycle (including transient-error retries) with a
-        // new token. The isAuthRetry flag prevents infinite recursion —
-        // a second 401 goes through handleHttpError and returns immediately.
-        if (status === 401 && !isAuthRetry) {
-          this.cachedToken = null;
-          return this.executeWithToken(request, true);
-        }
-
-        if (status === 429) {
-          const retryAfter = response.headers.get("Retry-After");
-          if (retryAfter) {
-            const seconds = parseInt(retryAfter, 10);
-            if (!Number.isNaN(seconds)) {
-              if (seconds > this.maxRetryAfterSeconds) {
-                return this.handleHttpError(response);
-              }
-              retryAfterMs = seconds * 1000;
-            }
-          }
-          this.logger?.warn("retry", { attempt, status, retryAfterMs });
-          lastResult = await this.handleHttpError(response);
-          continue;
-        }
-
-        if (status >= 500) {
-          this.logger?.warn("retry", { attempt, status, retryAfterMs: 0 });
-          lastResult = await this.handleHttpError(response);
-          continue;
-        }
-
-        const httpResult = await this.handleHttpError(response);
-        if (!httpResult.ok) {
-          this.logger?.error("request failed", { code: httpResult.error.code, message: httpResult.error.message });
-        }
-        return httpResult;
-      }
-
-      let json: unknown;
-      try {
-        json = await response.json();
-      } catch {
-        return { ok: false, error: upsError("PROVIDER", "Failed to parse UPS response as JSON") };
-      }
-      this.logger?.debug("response payload", { body: json });
-      const mapped = this.mapResponse(json);
-      if (mapped.ok) {
-        this.logger?.info("rating success", { quoteCount: mapped.data.length });
-      }
-      return mapped;
+      return result;
     }
 
-    return lastResult ?? { ok: false, error: upsError("UNKNOWN", "Max retries exceeded", true) };
-  }
-
-  private async handleHttpError(response: Response): Promise<CarrierResult<RateQuote[]>> {
-    const status = response.status;
-
-    let upsMessage = "";
-    let errorBody: unknown = "unparseable";
-    try {
-      const body = await response.json() as UpsErrorEnvelope;
-      errorBody = body;
-      const errors = body?.response?.errors;
-      if (Array.isArray(errors) && errors.length > 0) {
-        upsMessage = errors.map((e) => `${e.code}: ${e.message}`).join("; ");
-      }
-    } catch {
-      // Body isn't parseable JSON (e.g., 500 with plain text)
+    const mapped = this.mapResponse(result.data.json);
+    if (mapped.ok) {
+      this.logger?.info("rating success", { quoteCount: mapped.data.length });
     }
-    this.logger?.debug("error response", { status, body: errorBody });
-
-    if (status === 401) {
-      this.cachedToken = null;
-      return { ok: false, error: upsError("AUTH", `UPS auth error (${status}): ${upsMessage || "Unauthorized"}`) };
-    }
-    if (status === 429) {
-      return { ok: false, error: upsError("RATE_LIMIT", `UPS rate limit exceeded (${status}): ${upsMessage || "Too many requests"}`, true) };
-    }
-    if (status >= 500) {
-      return { ok: false, error: upsError("PROVIDER", upsMessage ? `UPS error (${status}): ${upsMessage}` : `UPS HTTP error (${status})`, true) };
-    }
-    if (upsMessage) {
-      return { ok: false, error: upsError("PROVIDER", `UPS error (${status}): ${upsMessage}`) };
-    }
-    return { ok: false, error: upsError("PROVIDER", `UPS HTTP error (${status})`) };
+    return mapped;
   }
 
   private mapResponse(json: unknown): CarrierResult<RateQuote[]> {
