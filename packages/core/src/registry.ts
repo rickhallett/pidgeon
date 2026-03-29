@@ -25,7 +25,7 @@ export class CarrierRegistry {
 
   async getRatesFromAll(request: RateRequest): Promise<AggregatedRateResult> {
     if (this.providers.size === 0) {
-      return { ok: false, error: "No carriers registered" };
+      return { ok: false, error: "No carriers registered", failures: [] };
     }
 
     const results = await Promise.all(
@@ -49,7 +49,7 @@ export class CarrierRegistry {
     }
 
     if (quotes.length === 0) {
-      return { ok: false, error: failures.map((e) => e.message).join("; ") };
+      return { ok: false, error: failures.map((e) => e.message).join("; "), failures };
     }
 
     return { ok: true, data: quotes, failures };

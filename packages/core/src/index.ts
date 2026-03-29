@@ -62,7 +62,7 @@ export type CarrierProvider = {
 
 export type AggregatedRateResult =
   | { readonly ok: true; readonly data: RateQuote[]; readonly failures: readonly CarrierError[] }
-  | { readonly ok: false; readonly error: string };
+  | { readonly ok: false; readonly error: string; readonly failures: readonly CarrierError[] };
 
 // --- Zod schemas ---
 
