@@ -17,43 +17,11 @@ export type CarrierError = {
   readonly retriable: boolean;
 };
 
-// --- Address ---
+// --- Domain types (inferred from Zod schemas) ---
 
-export type Address = {
-  readonly street: string;
-  readonly postalCode: string;
-  readonly countryCode: string;
-  readonly city: string;
-  readonly state: string;
-};
+export type { Address, Weight, Dimensions, Package, RateRequest } from "./schemas.js";
 
-// --- Package ---
-
-export type Weight = {
-  readonly value: number;
-  readonly unit: string;
-};
-
-export type Dimensions = {
-  readonly length: number;
-  readonly width: number;
-  readonly height: number;
-  readonly unit: string;
-};
-
-export type Package = {
-  readonly weight: Weight;
-  readonly dimensions: Dimensions;
-};
-
-// --- Rate Request / Quote ---
-
-export type RateRequest = {
-  readonly origin: Address;
-  readonly destination: Address;
-  readonly packages: readonly Package[];
-  readonly serviceCode?: string;
-};
+// --- Rate Quote ---
 
 export type Surcharge = {
   readonly type: string;

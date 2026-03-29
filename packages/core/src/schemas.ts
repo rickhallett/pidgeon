@@ -28,6 +28,12 @@ export const AddressSchema = z.object({
 export const RateRequestSchema = z.object({
   origin: AddressSchema,
   destination: AddressSchema,
-  packages: z.array(PackageSchema).min(1),
+  packages: z.array(PackageSchema).min(1).readonly(),
   serviceCode: z.string().optional(),
 });
+
+export type Address = z.infer<typeof AddressSchema>;
+export type Weight = z.infer<typeof WeightSchema>;
+export type Dimensions = z.infer<typeof DimensionsSchema>;
+export type Package = z.infer<typeof PackageSchema>;
+export type RateRequest = z.infer<typeof RateRequestSchema>;
