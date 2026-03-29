@@ -81,3 +81,8 @@ export {
 // --- Registry ---
 
 export { CarrierRegistry } from "./registry.js";
+
+// --- HTTP transport ---
+
+export { httpRequest } from "./http.js";
+export type { FetchFn, HttpClientConfig, HttpRequestConfig, ErrorBodyParser } from "./http.js";
