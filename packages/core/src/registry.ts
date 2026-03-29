@@ -1,4 +1,4 @@
-import type { CarrierError, CarrierProvider, CarrierResult, RateRequest, RateQuote, Result } from "./index.js";
+import type { AggregatedRateResult, CarrierError, CarrierProvider, CarrierResult, RateRequest, Result } from "./index.js";
 
 export class CarrierRegistry {
   private readonly providers = new Map<string, CarrierProvider>();
@@ -23,35 +23,35 @@ export class CarrierRegistry {
     return [...this.providers.keys()];
   }
 
-  async getRatesFromAll(request: RateRequest): Promise<Result<RateQuote[]>> {
+  async getRatesFromAll(request: RateRequest): Promise<AggregatedRateResult> {
     if (this.providers.size === 0) {
       return { ok: false, error: "No carriers registered" };
     }
 
     const results = await Promise.all(
       [...this.providers.values()].map((p) =>
-        p.getRates(request).catch((err: unknown): CarrierResult<RateQuote[]> => ({
+        p.getRates(request).catch((err: unknown): CarrierResult<never> => ({
           ok: false,
           error: { code: "UNKNOWN", message: String(err), carrier: "unknown", retriable: false },
         })),
       ),
     );
 
-    const quotes: RateQuote[] = [];
-    const errors: CarrierError[] = [];
+    const quotes: import("./index.js").RateQuote[] = [];
+    const failures: CarrierError[] = [];
 
     for (const result of results) {
       if (result.ok) {
         quotes.push(...result.data);
       } else {
-        errors.push(result.error);
+        failures.push(result.error);
       }
     }
 
     if (quotes.length === 0) {
-      return { ok: false, error: errors.map((e) => e.message).join("; ") };
+      return { ok: false, error: failures.map((e) => e.message).join("; ") };
     }
 
-    return { ok: true, data: quotes };
+    return { ok: true, data: quotes, failures };
   }
 }

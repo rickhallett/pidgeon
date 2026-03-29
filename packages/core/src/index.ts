@@ -90,6 +90,12 @@ export type CarrierProvider = {
   getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>>;
 };
 
+// --- Aggregated result ---
+
+export type AggregatedRateResult =
+  | { readonly ok: true; readonly data: RateQuote[]; readonly failures: readonly CarrierError[] }
+  | { readonly ok: false; readonly error: string };
+
 // --- Zod schemas ---
 
 export {
