@@ -50,6 +50,16 @@ When stubbing external APIs (UPS, future carriers), the stub must reflect the re
 - What happens when weight is 0? Negative? A string?
 - What happens when an optional field is absent vs explicitly null vs empty string?
 
+## Test Granularity — Avoid Brittleness
+
+Request-building tests are especially prone to becoming upstream API snapshots. Apply this filter:
+
+- **Keep**: assertions that domain values land in the right structural location (postal code, weight, account number), that required semantic sections exist (shipper, recipient, package, payment, transit info), and that optional sections are omitted when source data is absent.
+- **Loosen**: exact endpoint paths, API version strings, upstream enum codes, literal header sets beyond auth/content-type, and broad object-equality checks against large payload subtrees.
+- **Practical rule**: if the assertion catches a bug in *this library*, keep it. If it only catches an upstream API format change, loosen or remove it. Upstream wire-format fidelity belongs in integration/contract tests, not unit tests.
+
+When in doubt, use `toHaveProperty()` and targeted field checks over `toEqual()` against deep object trees.
+
 ## What You Must Not Do
 
 - Do not write implementation code. If a test needs a function to exist, write the test that calls it and let the implementer create it.

@@ -224,3 +224,25 @@ decisions:
       in their makeProvider helpers. Tester needs to update to FetchFn import.
       Build (tsconfig.build.json) excludes tests so this doesn't block dist output.
       typecheck will report errors in test files until the tester updates them.
+
+  - id: 017
+    date: 2026-03-29
+    title: Loosen request-builder tests to avoid upstream brittleness
+    choice: >
+      Test domain-value placement and structural presence of required sections.
+      Remove exact assertions on UPS endpoint paths, API version strings,
+      RequestOption literals, and upstream enum codes.
+    alternatives:
+      - Keep granular assertions (catches upstream drift but breaks on every API version bump)
+      - Full payload snapshot tests (maximum coverage, maximum brittleness)
+    rationale: >
+      Round 3 triage produced tests that effectively snapshot the outbound UPS
+      request body. These tests broke on any upstream format change even when
+      this library's behavior was correct. The practical rule: if the assertion
+      catches a bug in this library, keep it; if it only catches an upstream
+      API change, loosen or remove it. Wire-format fidelity belongs in
+      integration/contract tests, not unit tests.
+    evidence: >
+      Operator review of request-builder.test.ts after triage T1-T5 implementation.
+      Test count went from 11 to 9 (removed 2 upstream-coupled tests, consolidated
+      structural checks). All 26 tests green.
