@@ -8,16 +8,21 @@ Each step is one or more atomic commits. Test first, implement, commit.
 Monorepo structure, bun workspaces, tsconfig, .gitignore.
 No code — just the skeleton.
 
-## 2. Walking skeleton (red)
+## 2–3. Walking skeleton (red → green)
 One test: "given a rate request, get back a normalised rate quote."
 Forces the entire vertical slice into existence as minimal shells —
 types, provider interface, UPS implementation, HTTP call, response mapping.
-Nothing works yet, but the shape of the system exists end-to-end.
+Hardcode everything to make it green. Working through-line to refactor into.
 
-## 3. Walking skeleton (green)
-Hardcode everything. Fake HTTP response, hardcoded mapping, types just
-wide enough to compile. The test goes green. Working through-line to
-refactor into.
+## 6. Error paths (reordered before steps 4–5; see devlog D015)
+Now that the through-line exists, break it. Network timeout, 429, 401,
+malformed JSON, validation failure. Error classes and Result type
+emerge from actual failure modes, not from a taxonomy designed upfront.
+
+**Why reordered:** Three cross-family adversarial reviews independently
+identified the missing error boundary as the highest-severity finding.
+Building request/response logic inside a broken boundary means every
+feature inherits the same flaw. Error paths first creates a safe container.
 
 ## 4. Real request building
 Test that domain input produces correct UPS API payload shape.
@@ -29,17 +34,12 @@ Test that a realistic UPS response payload maps to RateQuote.
 Types and schemas for the response side emerge here.
 Surcharges, billing weight, guaranteed delivery.
 
-## 6. Error paths
-Now that happy path works, break it. Network timeout, 429, 401,
-malformed JSON, validation failure. Error classes and Result type
-emerge from actual failure modes, not from a taxonomy designed upfront.
-
 ## 7. Auth lifecycle
 Token acquisition, caching, refresh on expiry.
 Layered onto the working skeleton — not a standalone module.
 
 ## 8. HTTP hardening
-Retry with exponential backoff, 429 handling, timeout, sanitised logging.
+Retry with exponential backoff, 429 handling, timeout.
 Layered onto working skeleton, tested against real failure scenarios
 already defined in step 6.
 
@@ -55,5 +55,13 @@ Real service to call, not a demo of imaginary plumbing.
 Extract the carrier interface from the concrete UPS implementation.
 Factory/registry. Refactored from working code, not designed in the abstract.
 
+## 11.5. Review feedback
+Cross-family adversarial reviews (Gemini, Claude, Codex) followed by
+two rounds of fixes: domain type alignment, Zod schemas, boundary
+validation, structured CarrierError, Logger integration, auth retry,
+registry failure attribution, test coverage gaps.
+
 ## 12. Polish
-README, .env.example, final test coverage review, commit history check.
+README, .env.example, CLI Zod validation, request/response payload
+logging, CarrierProvider optional methods, final test coverage review,
+commit history audit.
