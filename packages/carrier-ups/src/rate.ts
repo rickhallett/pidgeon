@@ -15,17 +15,24 @@ type UpsRateProviderConfig = {
 
 export class UpsRateProvider {
   private readonly config: UpsRateProviderConfig;
+  private cachedToken: { accessToken: string; expiresAt: number } | null = null;
 
   constructor(config: UpsRateProviderConfig) {
     this.config = config;
   }
 
   async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
+    const tokenResult = await this.getToken();
+    if (!tokenResult.ok) return tokenResult;
+
     let response: Response;
     try {
       response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenResult.data}`,
+        },
         body: JSON.stringify(this.buildRequestBody(request)),
       });
     } catch (error: unknown) {
@@ -64,6 +71,7 @@ export class UpsRateProvider {
     }
 
     if (status === 401) {
+      this.cachedToken = null;
       return { ok: false, error: `UPS auth error (${status}): ${upsMessage || "Unauthorized"}` };
     }
     if (status === 429) {
@@ -141,6 +149,57 @@ export class UpsRateProvider {
     }
 
     return { ok: true, data: quotes };
+  }
+
+  private async getToken(): Promise<Result<string>> {
+    if (this.cachedToken && Date.now() < this.cachedToken.expiresAt) {
+      return { ok: true, data: this.cachedToken.accessToken };
+    }
+    return this.acquireToken();
+  }
+
+  private async acquireToken(): Promise<Result<string>> {
+    const { clientId, clientSecret } = this.config.credentials;
+
+    let response: Response;
+    try {
+      response = await this.config.fetch("https://onlinetools.ups.com/security/v1/oauth/token", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "grant_type=client_credentials",
+      });
+    } catch (error: unknown) {
+      return { ok: false, error: `token endpoint error: ${error instanceof Error ? error.message : String(error)}` };
+    }
+
+    if (!response.ok) {
+      return { ok: false, error: `UPS auth token error (${response.status})` };
+    }
+
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch {
+      return { ok: false, error: "Failed to parse token response as JSON" };
+    }
+
+    const body = json as Record<string, unknown>;
+    const accessToken = body?.access_token;
+    if (typeof accessToken !== "string") {
+      return { ok: false, error: "token response missing access_token" };
+    }
+
+    const rawExpiry = body.expires_in;
+    const expiresIn = typeof rawExpiry === "number" ? rawExpiry : parseInt(String(rawExpiry), 10) || 0;
+    this.cachedToken = {
+      accessToken,
+      expiresAt: Date.now() + Math.max(0, expiresIn - 60) * 1000,
+    };
+
+    return { ok: true, data: accessToken };
   }
 
   private buildRequestBody(request: RateRequest): unknown {
