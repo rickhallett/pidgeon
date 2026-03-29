@@ -50,7 +50,7 @@ export function createProgram(deps: ProgramDeps): Command {
       });
 
       if (!parsed.success) {
-        const errors = parsed.error.issues.map((issue) => `--${issue.path[0]} must be a positive number`);
+        const errors = parsed.error.issues.map((issue) => `--${String(issue.path[0])} must be a positive number`);
         deps.write(`Error: ${errors.join("; ")}`);
         return;
       }

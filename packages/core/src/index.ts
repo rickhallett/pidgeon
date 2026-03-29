@@ -19,6 +19,7 @@ export type CarrierError = {
 
 // --- Domain types (inferred from Zod schemas) ---
 
+import type { Address, Weight, Dimensions, Package, RateRequest } from "./schemas.js";
 export type { Address, Weight, Dimensions, Package, RateRequest } from "./schemas.js";
 
 // --- Rate Quote ---
