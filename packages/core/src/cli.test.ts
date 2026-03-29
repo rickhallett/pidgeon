@@ -388,6 +388,8 @@ describe("cli: json output", () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(false);
-    expect(parsed.error).toContain("500");
+    expect(parsed.error.message).toContain("500");
+    expect(parsed.error.code).toBe("PROVIDER");
+    expect(parsed.error.carrier).toBe("UPS");
   });
 });

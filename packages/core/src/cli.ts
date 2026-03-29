@@ -80,7 +80,7 @@ export function createProgram(deps: ProgramDeps): Command {
         if (result.ok) {
           deps.write(JSON.stringify(result.data));
         } else {
-          deps.write(JSON.stringify({ ok: false, error: result.error.message }));
+          deps.write(JSON.stringify({ ok: false, error: result.error }));
         }
         return;
       }
