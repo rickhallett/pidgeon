@@ -263,3 +263,21 @@ decisions:
       propagated through review reports. Resolution status of prior findings
       should be inferred from the code itself (e.g., does the try/catch exist?),
       not from reading a report that says it was added.
+
+  - id: 019
+    date: 2026-03-29
+    title: Step 5 (response normalisation) next, then step 8 (retry/backoff)
+    choice: >
+      Resume BUILD_ORDER with step 5 on feature/response-normalisation branch.
+      Multi-service mapping, GuaranteedIndicator, edge cases in quote mapping.
+      Step 8 (retry, backoff, timeout wrapper) follows after step 5.
+    alternatives:
+      - Jump to step 8 (HTTP wrapper) to close Retry-After carried finding
+      - Jump to step 9 (Zod validation) to close schema-related deferrals
+    rationale: >
+      Step 5 completes the rating flow end-to-end before adding infrastructure
+      (retry, validation). It also closes the GuaranteedIndicator finding
+      carried as open across 4 adversarial review rounds. The mapper
+      infrastructure exists from steps 2+6; step 5 deepens coverage.
+      Step 8 is the next cross-cutting concern (like auth was) and should
+      follow once the rating response surface is fully mapped.
