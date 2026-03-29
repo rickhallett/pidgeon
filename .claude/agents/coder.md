@@ -1,5 +1,5 @@
 ---
-name: implementer
+name: coder
 description: Writes production code to satisfy failing tests. Focused on making red tests green with minimum viable implementation. Does not write tests, does not refactor beyond what the test demands.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus

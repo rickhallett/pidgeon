@@ -45,12 +45,21 @@ bun run build          # Build all packages
 
 ## Agents
 
-| Agent | File | Purpose |
-|-------|------|---------|
-| implementer | `.claude/agents/implementer.md` | Writes production code to satisfy failing tests |
-| test-designer | `.claude/agents/test-designer.md` | Designs tests, evaluates coverage, validates test quality |
-| adversarial-reviewer | `.claude/agents/adversarial-reviewer.md` | Finds bugs, not confirms correctness |
-| clean-code | `.claude/agents/clean-code.md` | Industry best practices, readability, idiomatic TypeScript |
+If the task matches an agent's responsibility and that agent isn't already loaded, dispatch to it.
+
+| Agent | Responsibility |
+|-------|---------------|
+| `coder` | Makes red tests green. Minimum viable implementation. Does not write tests. |
+| `tester` | Writes failing tests. Evaluates test quality. Owns the red step. |
+| `adversarial-reviewer` | Finds bugs and security issues. Does not confirm correctness. |
+| `janitor` | Refactors for readability and idiomatic TypeScript. Does not add functionality. |
+
+## Context Window
+
+200K tokens in, 1M tokens out (model limits). Context degrades before it fills.
+Start fresh sessions frequently — at developer discretion, but err toward fresh.
+Signs it's time: repeated mistakes, forgotten earlier instructions, losing coherence.
+Commit and push before starting a new session. The repo is the handoff artifact.
 
 ## LLM Constraints
 

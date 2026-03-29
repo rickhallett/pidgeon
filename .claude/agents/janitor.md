@@ -1,5 +1,5 @@
 ---
-name: clean-code
+name: janitor
 description: Reviews for readability, idiomatic TypeScript, naming, structure, and industry best practices. The refactor step of red-green-refactor. Does not add functionality — improves what exists.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus
