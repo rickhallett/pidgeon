@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import type { RateRequest } from "@pidgeon/core";
-import { UpsRateProvider } from "./rate.js";
+import { UpsRateProvider, type FetchFn } from "./rate.js";
 
 /**
  * BUILD_ORDER Step 6 — Error paths.
@@ -38,7 +38,7 @@ const DOMESTIC_REQUEST: RateRequest = {
   ],
 };
 
-function makeProvider(fakeFetch: typeof globalThis.fetch): UpsRateProvider {
+function makeProvider(fakeFetch: FetchFn): UpsRateProvider {
   return new UpsRateProvider({
     fetch: fakeFetch,
     credentials: {
@@ -229,7 +229,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toBeDefined();
+    expect(result.error).toContain("RateResponse");
   });
 
   it("returns error when RatedShipment is missing from response", async () => {
@@ -249,7 +249,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toBeDefined();
+    expect(result.error).toContain("RatedShipment");
   });
 
   it("returns error when TotalCharges.MonetaryValue is not a parseable number", async () => {
@@ -282,6 +282,92 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
+    expect(result.error).toContain("monetary");
+  });
+
+  it("returns error when shipment element is missing TimeInTransit", async () => {
+    const provider = makeProvider(async () =>
+      new Response(
+        JSON.stringify({
+          RateResponse: {
+            RatedShipment: [
+              {
+                Service: { Code: "03" },
+                BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+                TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+                RatedPackage: [],
+                // TimeInTransit intentionally absent
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
     expect(result.error).toBeDefined();
+  });
+
+  it("returns error on 400 with HTML body", async () => {
+    const provider = makeProvider(async () =>
+      new Response("<html>Bad Request</html>", {
+        status: 400,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("400");
+  });
+
+  it("returns error when surcharge MonetaryValue is unparseable", async () => {
+    const provider = makeProvider(async () =>
+      new Response(
+        JSON.stringify({
+          RateResponse: {
+            RatedShipment: [
+              {
+                Service: { Code: "03" },
+                BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+                TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+                RatedPackage: [
+                  {
+                    ItemizedCharges: [
+                      {
+                        Code: "375",
+                        CurrencyCode: "USD",
+                        MonetaryValue: "N/A",
+                        SubType: "Fuel Surcharge",
+                      },
+                    ],
+                  },
+                ],
+                TimeInTransit: {
+                  ServiceSummary: {
+                    Service: { Description: "UPS Ground" },
+                    EstimatedArrival: { BusinessDaysInTransit: "2" },
+                    GuaranteedIndicator: "",
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("surcharge");
   });
 });

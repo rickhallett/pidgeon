@@ -12,7 +12,7 @@ import { describe, it, expect } from "bun:test";
 
 // These imports don't exist yet. The test defines the shape the system must take.
 import type { RateRequest, RateQuote } from "@pidgeon/core";
-import { UpsRateProvider } from "./rate.js";
+import { UpsRateProvider, type FetchFn } from "./rate.js";
 
 const UPS_RATE_RESPONSE = {
   RateResponse: {
@@ -60,14 +60,14 @@ const UPS_RATE_RESPONSE = {
 describe("walking skeleton", () => {
   it("returns a normalised rate quote for a domestic UPS Ground shipment", async () => {
     // Arrange — stub fetch to return realistic UPS response
-    const fakeFetch = async () =>
+    const fakeFetch: FetchFn = async (_input, _init) =>
       new Response(JSON.stringify(UPS_RATE_RESPONSE), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
 
     const provider = new UpsRateProvider({
-      fetch: fakeFetch as unknown as typeof globalThis.fetch,
+      fetch: fakeFetch,
       credentials: {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
