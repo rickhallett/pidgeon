@@ -1,3 +1,4 @@
+import { RateRequestSchema } from "@pidgeon/core";
 import type { Address, CarrierProvider, RateRequest, RateQuote, Result } from "@pidgeon/core";
 
 type UpsCredentials = {
@@ -53,6 +54,12 @@ export class UpsRateProvider {
   }
 
   async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
+    const validation = RateRequestSchema.safeParse(request);
+    if (!validation.success) {
+      const messages = validation.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      return { ok: false, error: `Validation failed: ${messages.join("; ")}` };
+    }
+
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
