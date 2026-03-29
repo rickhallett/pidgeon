@@ -68,6 +68,16 @@ export type CarrierProvider = {
   getRates(request: RateRequest): Promise<Result<RateQuote[]>>;
 };
 
+// --- Zod schemas ---
+
+export {
+  AddressSchema,
+  WeightSchema,
+  DimensionsSchema,
+  PackageSchema,
+  RateRequestSchema,
+} from "./schemas.js";
+
 // --- Registry ---
 
 export { CarrierRegistry } from "./registry.js";
