@@ -383,3 +383,34 @@ describe("http retry: timeout", () => {
     expect(elapsed).toBeLessThan(20_000);
   }, 20_000);
 });
+
+// --- Auth retry with transient errors (F5) ---
+
+describe("http retry: auth retry with transient errors", () => {
+  it("401 then 500 then success results in 3 rating calls", async () => {
+    const { fetch, ratingCallCount } = sequenceFetch([
+      clientError(401, { response: { errors: [{ code: "250003", message: "Invalid Access Token" }] } }),
+      serverError(500),
+      success(),
+    ]);
+    const provider = makeProvider(fetch);
+
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    expect(ratingCallCount()).toBe(3);
+  });
+
+  it("401 then success on fresh token results in 2 rating calls", async () => {
+    const { fetch, ratingCallCount } = sequenceFetch([
+      clientError(401, { response: { errors: [{ code: "250003", message: "Invalid Access Token" }] } }),
+      success(),
+    ]);
+    const provider = makeProvider(fetch);
+
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    expect(ratingCallCount()).toBe(2);
+  });
+});

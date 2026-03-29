@@ -422,3 +422,166 @@ describe("response normalisation: empty results", () => {
     expect(result.data).toEqual([]);
   });
 });
+
+// --- Estimated delivery date parsing (F3) ---
+
+describe("response normalisation: estimated delivery", () => {
+  it("parses YYYYMMDD date from Arrival.Date into estimatedDelivery", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: {
+            Arrival: { Date: "20260401" },
+            BusinessDaysInTransit: "5",
+          },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.estimatedDelivery).toEqual(new Date("2026-04-01"));
+  });
+
+  it("returns null estimatedDelivery when Arrival is absent", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: {
+            BusinessDaysInTransit: "5",
+          },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.estimatedDelivery).toBeNull();
+  });
+
+  it("returns null estimatedDelivery when Arrival.Date is empty string", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: {
+            Arrival: { Date: "" },
+            BusinessDaysInTransit: "5",
+          },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.estimatedDelivery).toBeNull();
+  });
+
+  it("returns null estimatedDelivery when Arrival.Date is malformed", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: {
+            Arrival: { Date: "not-a-date" },
+            BusinessDaysInTransit: "5",
+          },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.estimatedDelivery).toBeNull();
+  });
+});
+
+// --- Nullable transit days (F4) ---
+
+describe("response normalisation: nullable transit days", () => {
+  it("returns null transitDays when BusinessDaysInTransit is non-numeric", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: { BusinessDaysInTransit: "N/A" },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.transitDays).toBeNull();
+  });
+
+  it("returns null transitDays when BusinessDaysInTransit is empty string", async () => {
+    const rawShipment = {
+      Service: { Code: "03" },
+      BillingWeight: { UnitOfMeasurement: { Code: "LBS" }, Weight: "1.0" },
+      TotalCharges: { CurrencyCode: "USD", MonetaryValue: "12.36" },
+      RatedPackage: [],
+      TimeInTransit: {
+        ServiceSummary: {
+          Service: { Description: "UPS Ground" },
+          EstimatedArrival: { BusinessDaysInTransit: "" },
+          GuaranteedIndicator: "",
+        },
+      },
+    };
+
+    const provider = makeProvider(stubFetchWithResponse([rawShipment]));
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data[0]!.transitDays).toBeNull();
+  });
+});
