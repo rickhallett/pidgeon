@@ -303,8 +303,9 @@ describe("http retry: non-retriable errors", () => {
     expect(ratingCallCount()).toBe(1);
   });
 
-  it("does not retry on 401 Unauthorized", async () => {
+  it("retries once on 401 with a fresh token, then fails if retry also 401", async () => {
     const { fetch, ratingCallCount } = sequenceFetch([
+      clientError(401, { response: { errors: [{ code: "250003", message: "Invalid Access Token" }] } }),
       clientError(401, { response: { errors: [{ code: "250003", message: "Invalid Access Token" }] } }),
     ]);
     const provider = makeProvider(fetch);
@@ -312,7 +313,7 @@ describe("http retry: non-retriable errors", () => {
     const result = await provider.getRates(DOMESTIC_REQUEST);
 
     expect(result.ok).toBe(false);
-    expect(ratingCallCount()).toBe(1);
+    expect(ratingCallCount()).toBe(2);
   });
 
   it("does not retry on 403 Forbidden", async () => {

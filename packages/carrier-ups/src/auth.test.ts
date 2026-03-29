@@ -177,7 +177,7 @@ describe("auth lifecycle: token caching", () => {
 // --- Token invalidation on 401 ---
 
 describe("auth lifecycle: token invalidation", () => {
-  it("clears cached token when rating endpoint returns 401, re-acquires on next call", async () => {
+  it("retries with fresh token on 401, succeeds on retry", async () => {
     let ratingCallCount = 0;
     let tokenCallCount = 0;
 
@@ -196,7 +196,7 @@ describe("auth lifecycle: token invalidation", () => {
         });
       }
 
-      // Rating endpoint: first call succeeds, second returns 401
+      // Rating endpoint: first call succeeds, second returns 401, third succeeds
       ratingCallCount++;
       if (ratingCallCount === 2) {
         return new Response(JSON.stringify({
@@ -219,13 +219,10 @@ describe("auth lifecycle: token invalidation", () => {
     expect(result1.ok).toBe(true);
     expect(tokenCallCount).toBe(1);
 
-    // Second call: reuses token-1, rating returns 401
+    // Second call: reuses token-1, rating returns 401 -> invalidates token,
+    // acquires token-2, retries rating -> succeeds
     const result2 = await provider.getRates(DOMESTIC_REQUEST);
-    expect(result2.ok).toBe(false);
-
-    // Third call: must acquire token-2 (not reuse the revoked token-1)
-    const result3 = await provider.getRates(DOMESTIC_REQUEST);
-    expect(result3.ok).toBe(true);
+    expect(result2.ok).toBe(true);
     expect(tokenCallCount).toBe(2);
   });
 });

@@ -64,6 +64,10 @@ export class UpsRateProvider {
       return { ok: false, error: upsError("VALIDATION", `Validation failed: ${messages.join("; ")}`) };
     }
 
+    return this.executeWithToken(request, false);
+  }
+
+  private async executeWithToken(request: RateRequest, isAuthRetry: boolean): Promise<CarrierResult<RateQuote[]>> {
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
@@ -111,6 +115,11 @@ export class UpsRateProvider {
 
       if (!response.ok) {
         const status = response.status;
+
+        if (status === 401 && !isAuthRetry) {
+          this.cachedToken = null;
+          return this.executeWithToken(request, true);
+        }
 
         if (status === 429) {
           const retryAfter = response.headers.get("Retry-After");
