@@ -29,35 +29,50 @@ type UpsRateProviderConfig = {
 };
 
 export class UpsRateProvider {
-  private readonly config: UpsRateProviderConfig;
+  private readonly fetchFn: FetchFn;
+  private readonly credentials: UpsCredentials;
+  private readonly maxAttempts: number;
+  private readonly baseDelayMs: number;
+  private readonly timeoutMs: number;
+  private readonly maxRetryAfterSeconds: number;
+  private readonly ratingUrl: string;
+  private readonly tokenUrl: string;
+  private readonly tokenExpiryBufferSeconds: number;
   private cachedToken: { accessToken: string; expiresAt: number } | null = null;
 
   constructor(config: UpsRateProviderConfig) {
-    this.config = config;
+    this.fetchFn = config.fetch;
+    this.credentials = config.credentials;
+    this.maxAttempts = config.retry?.maxAttempts ?? 4;
+    this.baseDelayMs = config.retry?.baseDelayMs ?? 200;
+    this.timeoutMs = config.retry?.timeoutMs ?? 3_000;
+    this.maxRetryAfterSeconds = config.retry?.maxRetryAfterSeconds ?? 5;
+    this.ratingUrl = config.urls?.rating ?? "https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit";
+    this.tokenUrl = config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token";
+    this.tokenExpiryBufferSeconds = config.tokenExpiryBufferSeconds ?? 60;
   }
 
   async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    const { maxAttempts = 4, baseDelayMs = 200, timeoutMs = 3_000, maxRetryAfterSeconds = 5 } = this.config.retry ?? {};
     let lastResult: Result<RateQuote[]> | null = null;
     let retryAfterMs = 0;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
       if (attempt > 0) {
-        const backoff = baseDelayMs * Math.pow(2, attempt - 1);
+        const backoff = this.baseDelayMs * Math.pow(2, attempt - 1);
         await new Promise((r) => setTimeout(r, Math.max(backoff, retryAfterMs)));
         retryAfterMs = 0;
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
       let response: Response;
       try {
         response = await Promise.race([
-          this.config.fetch(this.config.urls?.rating ?? "https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
+          this.fetchFn(this.ratingUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -91,7 +106,7 @@ export class UpsRateProvider {
           if (retryAfter) {
             const seconds = parseInt(retryAfter, 10);
             if (!Number.isNaN(seconds)) {
-              if (seconds > maxRetryAfterSeconds) {
+              if (seconds > this.maxRetryAfterSeconds) {
                 return this.handleHttpError(response);
               }
               retryAfterMs = seconds * 1000;
@@ -224,11 +239,11 @@ export class UpsRateProvider {
   }
 
   private async acquireToken(): Promise<Result<string>> {
-    const { clientId, clientSecret } = this.config.credentials;
+    const { clientId, clientSecret } = this.credentials;
 
     let response: Response;
     try {
-      response = await this.config.fetch(this.config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token", {
+      response = await this.fetchFn(this.tokenUrl, {
         method: "POST",
         headers: {
           "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
@@ -261,7 +276,7 @@ export class UpsRateProvider {
     const expiresIn = typeof rawExpiry === "number" ? rawExpiry : parseInt(String(rawExpiry), 10) || 0;
     this.cachedToken = {
       accessToken,
-      expiresAt: Date.now() + Math.max(0, expiresIn - (this.config.tokenExpiryBufferSeconds ?? 60)) * 1000,
+      expiresAt: Date.now() + Math.max(0, expiresIn - this.tokenExpiryBufferSeconds) * 1000,
     };
 
     return { ok: true, data: accessToken };
@@ -276,7 +291,7 @@ export class UpsRateProvider {
         },
         Shipment: {
           Shipper: {
-            ShipperNumber: this.config.credentials.accountNumber,
+            ShipperNumber: this.credentials.accountNumber,
             Address: this.mapAddress(request.origin),
           },
           ShipTo: {
@@ -289,7 +304,7 @@ export class UpsRateProvider {
             ShipmentCharge: {
               Type: "01",
               BillShipper: {
-                AccountNumber: this.config.credentials.accountNumber,
+                AccountNumber: this.credentials.accountNumber,
               },
             },
           },
