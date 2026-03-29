@@ -206,3 +206,21 @@ decisions:
       docs/reviews/walking-skeleton-20260329-141436-claude.md (CRITICAL),
       docs/reviews/walking-skeleton-20260329-141449-codex.md (HIGH),
       docs/reviews/walking-skeleton-20260329-153000-gemini.md (HIGH+MEDIUM)
+
+  - id: 016
+    date: 2026-03-29
+    title: FetchFn type replaces typeof globalThis.fetch
+    choice: Narrow FetchFn callable type for fetch injection
+    alternatives:
+      - typeof globalThis.fetch (includes static methods like preconnect)
+    rationale: >
+      TS 6 + bun-types define globalThis.fetch with a preconnect static method.
+      Our code only calls fetch() — never accesses statics. The narrow FetchFn
+      type accepts globalThis.fetch (structurally compatible) but also accepts
+      simple arrow functions in tests without double-casting through unknown.
+      Resolves Claude review finding #2 (HIGH) about the double-cast workaround.
+    note: >
+      Test files (rate.test.ts, rate-errors.test.ts) still use typeof globalThis.fetch
+      in their makeProvider helpers. Tester needs to update to FetchFn import.
+      Build (tsconfig.build.json) excludes tests so this doesn't block dist output.
+      typecheck will report errors in test files until the tester updates them.

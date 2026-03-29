@@ -25,3 +25,10 @@
   Why it matters: While the current test case is fine, if UPS returns an empty string or non-numeric value for `BusinessDaysInTransit`, `parseInt` might return `NaN` or incorrect results.
   Evidence: `transitDays: parseInt(shipment.TimeInTransit.ServiceSummary.EstimatedArrival.BusinessDaysInTransit, 10),`
   Suggested fix: Add robust parsing/validation for numeric strings, ensuring they are valid numbers before `parseInt`/`parseFloat`.
+
+[HIGH] Test Quality — Incomplete assertions in error paths
+  Where: packages/carrier-ups/src/rate-errors.test.ts
+  What: The tests verify that `result.ok` is `false`, but they often rely on loose string matching (e.g., `result.error.toContain("network")`).
+  Why it matters: If the code returns an error for the wrong reason (e.g., a parsing error instead of a network error), the test will still pass.
+  Evidence: `expect(result.error).toContain("network");`
+  Suggested fix: Assert on specific error codes or error types, not just string fragments.

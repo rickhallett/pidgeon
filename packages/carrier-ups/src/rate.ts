@@ -6,8 +6,10 @@ type UpsCredentials = {
   readonly accountNumber: string;
 };
 
+export type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
 type UpsRateProviderConfig = {
-  readonly fetch: typeof globalThis.fetch;
+  readonly fetch: FetchFn;
   readonly credentials: UpsCredentials;
 };
 
@@ -19,34 +21,109 @@ export class UpsRateProvider {
   }
 
   async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
-    const response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Rate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(this.buildRequestBody(request)),
-    });
+    let response: Response;
+    try {
+      response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this.buildRequestBody(request)),
+      });
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return { ok: false, error: "Request timeout" };
+      }
+      return { ok: false, error: `network error: ${error instanceof Error ? error.message : String(error)}` };
+    }
 
-    const json = await response.json() as UpsRateResponseEnvelope;
-    const ratedShipments = json.RateResponse.RatedShipment;
+    if (!response.ok) {
+      return this.handleHttpError(response);
+    }
 
-    const quotes: RateQuote[] = ratedShipments.map((shipment) => ({
-      carrier: "UPS",
-      serviceCode: shipment.Service.Code,
-      serviceName: shipment.TimeInTransit.ServiceSummary.Service.Description,
-      totalCharge: parseFloat(shipment.TotalCharges.MonetaryValue),
-      currency: shipment.TotalCharges.CurrencyCode,
-      transitDays: parseInt(shipment.TimeInTransit.ServiceSummary.EstimatedArrival.BusinessDaysInTransit, 10),
-      billableWeight: {
-        value: parseFloat(shipment.BillingWeight.Weight),
-        unit: shipment.BillingWeight.UnitOfMeasurement.Code,
-      },
-      surcharges: shipment.RatedPackage.flatMap((pkg) =>
-        (pkg.ItemizedCharges ?? []).map((charge) => ({
-          type: charge.SubType,
-          amount: parseFloat(charge.MonetaryValue),
-        })),
-      ),
-      guaranteed: shipment.TimeInTransit.ServiceSummary.GuaranteedIndicator !== "",
-    }));
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch {
+      return { ok: false, error: "Failed to parse UPS response as JSON" };
+    }
+
+    return this.mapResponse(json);
+  }
+
+  private async handleHttpError(response: Response): Promise<Result<RateQuote[]>> {
+    const status = response.status;
+
+    let upsMessage = "";
+    try {
+      const body = await response.json() as UpsErrorEnvelope;
+      const errors = body?.response?.errors;
+      if (Array.isArray(errors) && errors.length > 0) {
+        upsMessage = errors.map((e) => `${e.code}: ${e.message}`).join("; ");
+      }
+    } catch {
+      // Body isn't parseable JSON (e.g., 500 with plain text)
+    }
+
+    if (status === 401) {
+      return { ok: false, error: `UPS auth error (${status}): ${upsMessage || "Unauthorized"}` };
+    }
+    if (status === 429) {
+      return { ok: false, error: `UPS rate limit exceeded (${status}): ${upsMessage || "Too many requests"}` };
+    }
+    if (upsMessage) {
+      return { ok: false, error: `UPS error (${status}): ${upsMessage}` };
+    }
+    return { ok: false, error: `UPS HTTP error (${status})` };
+  }
+
+  private mapResponse(json: unknown): Result<RateQuote[]> {
+    const envelope = json as Record<string, unknown> | null;
+    const rateResponse = envelope?.RateResponse as Record<string, unknown> | undefined;
+    if (!rateResponse) {
+      return { ok: false, error: "Invalid response: missing RateResponse" };
+    }
+
+    const ratedShipments = rateResponse.RatedShipment;
+    if (!Array.isArray(ratedShipments)) {
+      return { ok: false, error: "Invalid response: missing RatedShipment" };
+    }
+
+    const quotes: RateQuote[] = [];
+    for (const shipment of ratedShipments as UpsRatedShipment[]) {
+      const totalCharge = parseFloat(shipment.TotalCharges.MonetaryValue);
+      if (Number.isNaN(totalCharge)) {
+        return { ok: false, error: `Invalid response: unparseable monetary value "${shipment.TotalCharges.MonetaryValue}"` };
+      }
+
+      const weight = parseFloat(shipment.BillingWeight.Weight);
+      if (Number.isNaN(weight)) {
+        return { ok: false, error: `Invalid response: unparseable weight "${shipment.BillingWeight.Weight}"` };
+      }
+
+      const transitDays = parseInt(shipment.TimeInTransit.ServiceSummary.EstimatedArrival.BusinessDaysInTransit, 10);
+      if (Number.isNaN(transitDays)) {
+        return { ok: false, error: "Invalid response: unparseable transit days" };
+      }
+
+      quotes.push({
+        carrier: "UPS",
+        serviceCode: shipment.Service.Code,
+        serviceName: shipment.TimeInTransit.ServiceSummary.Service.Description,
+        totalCharge,
+        currency: shipment.TotalCharges.CurrencyCode,
+        transitDays,
+        billableWeight: {
+          value: weight,
+          unit: shipment.BillingWeight.UnitOfMeasurement.Code,
+        },
+        surcharges: shipment.RatedPackage.flatMap((pkg) =>
+          (pkg.ItemizedCharges ?? []).map((charge) => ({
+            type: charge.SubType,
+            amount: parseFloat(charge.MonetaryValue),
+          })),
+        ),
+        guaranteed: shipment.TimeInTransit.ServiceSummary.GuaranteedIndicator !== "",
+      });
+    }
 
     return { ok: true, data: quotes };
   }
@@ -96,4 +173,10 @@ type UpsItemizedCharge = {
   CurrencyCode: string;
   MonetaryValue: string;
   SubType: string;
+};
+
+type UpsErrorEnvelope = {
+  response?: {
+    errors?: Array<{ code: string; message: string }>;
+  };
 };
