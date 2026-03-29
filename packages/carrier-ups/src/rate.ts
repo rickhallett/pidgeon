@@ -141,7 +141,7 @@ export class UpsRateProvider {
             unit: shipment.BillingWeight.UnitOfMeasurement.Code,
           },
           surcharges,
-          guaranteed: timeInTransit.GuaranteedIndicator !== "",
+          guaranteed: timeInTransit.GuaranteedIndicator != null && timeInTransit.GuaranteedIndicator !== "",
         });
       } catch (error: unknown) {
         return { ok: false, error: `Invalid response: malformed shipment data (${error instanceof Error ? error.message : String(error)})` };
@@ -296,7 +296,7 @@ type UpsRatedShipment = {
       EstimatedArrival: {
         BusinessDaysInTransit: string;
       };
-      GuaranteedIndicator: string;
+      GuaranteedIndicator?: string;
     };
   };
 };
