@@ -443,3 +443,24 @@ deferred:
       test infrastructure improvement — no production code change needed.
     follow_up_trigger: >
       Address during janitor pass after HTTP retry behavior is stable and committed.
+
+  - id: D013
+    date: 2026-03-29
+    title: Config test gaps acknowledged — invalid URL format and negative token buffer
+    status: acknowledged-not-added
+    source:
+      - tester review of config.test.ts and config-wiring.test.ts
+    rationale: >
+      Two minor test gaps identified during tester review of step 9 config tests:
+      (1) No test for invalid URL format (e.g. UPS_RATING_URL="not-a-url") —
+      Zod's .url() validator rejects it, but the rejection path is untested.
+      (2) No test for negative UPS_TOKEN_EXPIRY_BUFFER_SECONDS — Zod's
+      .nonnegative() rejects it, but no explicit test exists.
+      Both are Zod-level validation; the tests would verify the library's
+      built-in validators, not our logic. The config surface is thin
+      (schema + env mapping) and the existing 20 tests cover the behavioral
+      contract: valid loads, missing required fields, bad values, defaults,
+      and wiring through to the provider. Adding more would test Zod, not us.
+    follow_up_trigger: >
+      Revisit if config validation bugs surface or if Zod schema changes
+      introduce regressions in rejection paths.
