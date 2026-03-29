@@ -29,10 +29,10 @@ export class CarrierRegistry {
     }
 
     const results = await Promise.all(
-      [...this.providers.values()].map((p) =>
+      [...this.providers.entries()].map(([name, p]) =>
         p.getRates(request).catch((err: unknown): CarrierResult<never> => ({
           ok: false,
-          error: { code: "UNKNOWN", message: String(err), carrier: "unknown", retriable: false },
+          error: { code: "UNKNOWN", message: String(err), carrier: name, retriable: false },
         })),
       ),
     );
