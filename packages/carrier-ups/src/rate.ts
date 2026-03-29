@@ -25,35 +25,88 @@ export class UpsRateProvider {
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    let response: Response;
-    try {
-      response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${tokenResult.data}`,
-        },
-        body: JSON.stringify(this.buildRequestBody(request)),
-      });
-    } catch (error: unknown) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return { ok: false, error: "Request timeout" };
+    const maxAttempts = 4;
+    const baseDelayMs = 200;
+    const timeoutMs = 3_000;
+    const maxRetryAfterSeconds = 5;
+    let lastResult: Result<RateQuote[]> | null = null;
+    let retryAfterMs = 0;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        const backoff = baseDelayMs * Math.pow(2, attempt - 1);
+        await new Promise((r) => setTimeout(r, Math.max(backoff, retryAfterMs)));
+        retryAfterMs = 0;
       }
-      return { ok: false, error: `network error: ${error instanceof Error ? error.message : String(error)}` };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      let response: Response;
+      try {
+        response = await Promise.race([
+          this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${tokenResult.data}`,
+            },
+            body: JSON.stringify(this.buildRequestBody(request)),
+            signal: controller.signal,
+          }),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted", "AbortError"));
+            });
+          }),
+        ]);
+        clearTimeout(timeoutId);
+      } catch (error: unknown) {
+        clearTimeout(timeoutId);
+        if (error instanceof DOMException && error.name === "AbortError") {
+          lastResult = { ok: false, error: "Request timeout" };
+          continue;
+        }
+        lastResult = { ok: false, error: `network error: ${error instanceof Error ? error.message : String(error)}` };
+        continue;
+      }
+
+      if (!response.ok) {
+        const status = response.status;
+
+        if (status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          if (retryAfter) {
+            const seconds = parseInt(retryAfter, 10);
+            if (!Number.isNaN(seconds)) {
+              if (seconds > maxRetryAfterSeconds) {
+                return this.handleHttpError(response);
+              }
+              retryAfterMs = seconds * 1000;
+            }
+          }
+          lastResult = await this.handleHttpError(response);
+          continue;
+        }
+
+        if (status >= 500) {
+          lastResult = await this.handleHttpError(response);
+          continue;
+        }
+
+        return this.handleHttpError(response);
+      }
+
+      let json: unknown;
+      try {
+        json = await response.json();
+      } catch {
+        return { ok: false, error: "Failed to parse UPS response as JSON" };
+      }
+      return this.mapResponse(json);
     }
 
-    if (!response.ok) {
-      return this.handleHttpError(response);
-    }
-
-    let json: unknown;
-    try {
-      json = await response.json();
-    } catch {
-      return { ok: false, error: "Failed to parse UPS response as JSON" };
-    }
-
-    return this.mapResponse(json);
+    return lastResult ?? { ok: false, error: "Max retries exceeded" };
   }
 
   private async handleHttpError(response: Response): Promise<Result<RateQuote[]>> {
