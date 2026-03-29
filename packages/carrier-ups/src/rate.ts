@@ -1,5 +1,5 @@
 import { RateRequestSchema } from "@pidgeon/core";
-import type { Address, CarrierProvider, RateRequest, RateQuote, Result } from "@pidgeon/core";
+import type { Address, CarrierError, CarrierProvider, CarrierResult, RateRequest, RateQuote } from "@pidgeon/core";
 
 type UpsCredentials = {
   readonly clientId: string;
@@ -29,6 +29,10 @@ type UpsRateProviderConfig = {
   readonly tokenExpiryBufferSeconds?: number;
 };
 
+function upsError(code: CarrierError['code'], message: string, retriable = false): CarrierError {
+  return { code, message, carrier: "UPS", retriable };
+}
+
 export class UpsRateProvider {
   private readonly fetchFn: FetchFn;
   private readonly credentials: UpsCredentials;
@@ -53,17 +57,17 @@ export class UpsRateProvider {
     this.tokenExpiryBufferSeconds = config.tokenExpiryBufferSeconds ?? 60;
   }
 
-  async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
+  async getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>> {
     const validation = RateRequestSchema.safeParse(request);
     if (!validation.success) {
       const messages = validation.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-      return { ok: false, error: `Validation failed: ${messages.join("; ")}` };
+      return { ok: false, error: upsError("VALIDATION", `Validation failed: ${messages.join("; ")}`) };
     }
 
     const tokenResult = await this.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    let lastResult: Result<RateQuote[]> | null = null;
+    let lastResult: CarrierResult<RateQuote[]> | null = null;
     let retryAfterMs = 0;
 
     for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
@@ -98,10 +102,10 @@ export class UpsRateProvider {
       } catch (error: unknown) {
         clearTimeout(timeoutId);
         if (error instanceof DOMException && error.name === "AbortError") {
-          lastResult = { ok: false, error: "Request timeout" };
+          lastResult = { ok: false, error: upsError("TIMEOUT", "Request timeout", true) };
           continue;
         }
-        lastResult = { ok: false, error: `network error: ${error instanceof Error ? error.message : String(error)}` };
+        lastResult = { ok: false, error: upsError("NETWORK", `network error: ${error instanceof Error ? error.message : String(error)}`, true) };
         continue;
       }
 
@@ -135,15 +139,15 @@ export class UpsRateProvider {
       try {
         json = await response.json();
       } catch {
-        return { ok: false, error: "Failed to parse UPS response as JSON" };
+        return { ok: false, error: upsError("PROVIDER", "Failed to parse UPS response as JSON") };
       }
       return this.mapResponse(json);
     }
 
-    return lastResult ?? { ok: false, error: "Max retries exceeded" };
+    return lastResult ?? { ok: false, error: upsError("UNKNOWN", "Max retries exceeded", true) };
   }
 
-  private async handleHttpError(response: Response): Promise<Result<RateQuote[]>> {
+  private async handleHttpError(response: Response): Promise<CarrierResult<RateQuote[]>> {
     const status = response.status;
 
     let upsMessage = "";
@@ -159,27 +163,30 @@ export class UpsRateProvider {
 
     if (status === 401) {
       this.cachedToken = null;
-      return { ok: false, error: `UPS auth error (${status}): ${upsMessage || "Unauthorized"}` };
+      return { ok: false, error: upsError("AUTH", `UPS auth error (${status}): ${upsMessage || "Unauthorized"}`) };
     }
     if (status === 429) {
-      return { ok: false, error: `UPS rate limit exceeded (${status}): ${upsMessage || "Too many requests"}` };
+      return { ok: false, error: upsError("RATE_LIMIT", `UPS rate limit exceeded (${status}): ${upsMessage || "Too many requests"}`, true) };
+    }
+    if (status >= 500) {
+      return { ok: false, error: upsError("PROVIDER", upsMessage ? `UPS error (${status}): ${upsMessage}` : `UPS HTTP error (${status})`, true) };
     }
     if (upsMessage) {
-      return { ok: false, error: `UPS error (${status}): ${upsMessage}` };
+      return { ok: false, error: upsError("PROVIDER", `UPS error (${status}): ${upsMessage}`) };
     }
-    return { ok: false, error: `UPS HTTP error (${status})` };
+    return { ok: false, error: upsError("PROVIDER", `UPS HTTP error (${status})`) };
   }
 
-  private mapResponse(json: unknown): Result<RateQuote[]> {
+  private mapResponse(json: unknown): CarrierResult<RateQuote[]> {
     const envelope = json as Record<string, unknown> | null;
     const rateResponse = envelope?.RateResponse as Record<string, unknown> | undefined;
     if (!rateResponse) {
-      return { ok: false, error: "Invalid response: missing RateResponse" };
+      return { ok: false, error: upsError("PROVIDER", "Invalid response: missing RateResponse") };
     }
 
     const ratedShipments = rateResponse.RatedShipment;
     if (!Array.isArray(ratedShipments)) {
-      return { ok: false, error: "Invalid response: missing RatedShipment" };
+      return { ok: false, error: upsError("PROVIDER", "Invalid response: missing RatedShipment") };
     }
 
     const quotes: RateQuote[] = [];
@@ -187,17 +194,17 @@ export class UpsRateProvider {
       try {
         const totalCharge = parseFloat(shipment.TotalCharges?.MonetaryValue);
         if (Number.isNaN(totalCharge)) {
-          return { ok: false, error: `Invalid response: unparseable monetary value "${shipment.TotalCharges?.MonetaryValue}"` };
+          return { ok: false, error: upsError("PROVIDER", `Invalid response: unparseable monetary value "${shipment.TotalCharges?.MonetaryValue}"`) };
         }
 
         const weight = parseFloat(shipment.BillingWeight?.Weight);
         if (Number.isNaN(weight)) {
-          return { ok: false, error: `Invalid response: unparseable weight "${shipment.BillingWeight?.Weight}"` };
+          return { ok: false, error: upsError("PROVIDER", `Invalid response: unparseable weight "${shipment.BillingWeight?.Weight}"`) };
         }
 
         const timeInTransit = shipment.TimeInTransit?.ServiceSummary;
         if (!timeInTransit) {
-          return { ok: false, error: "Invalid response: missing TimeInTransit data" };
+          return { ok: false, error: upsError("PROVIDER", "Invalid response: missing TimeInTransit data") };
         }
 
         const rawTransitDays = parseInt(timeInTransit.EstimatedArrival.BusinessDaysInTransit, 10);
@@ -220,7 +227,7 @@ export class UpsRateProvider {
           for (const charge of pkg.ItemizedCharges ?? []) {
             const amount = parseFloat(charge.MonetaryValue);
             if (Number.isNaN(amount)) {
-              return { ok: false, error: `Invalid response: unparseable surcharge amount "${charge.MonetaryValue}"` };
+              return { ok: false, error: upsError("PROVIDER", `Invalid response: unparseable surcharge amount "${charge.MonetaryValue}"`) };
             }
             surcharges.push({ type: charge.SubType, amount });
           }
@@ -242,21 +249,21 @@ export class UpsRateProvider {
           guaranteed: timeInTransit.GuaranteedIndicator != null && timeInTransit.GuaranteedIndicator !== "",
         });
       } catch (error: unknown) {
-        return { ok: false, error: `Invalid response: malformed shipment data (${error instanceof Error ? error.message : String(error)})` };
+        return { ok: false, error: upsError("PROVIDER", `Invalid response: malformed shipment data (${error instanceof Error ? error.message : String(error)})`) };
       }
     }
 
     return { ok: true, data: quotes };
   }
 
-  private async getToken(): Promise<Result<string>> {
+  private async getToken(): Promise<CarrierResult<string>> {
     if (this.cachedToken && Date.now() < this.cachedToken.expiresAt) {
       return { ok: true, data: this.cachedToken.accessToken };
     }
     return this.acquireToken();
   }
 
-  private async acquireToken(): Promise<Result<string>> {
+  private async acquireToken(): Promise<CarrierResult<string>> {
     const { clientId, clientSecret } = this.credentials;
 
     let response: Response;
@@ -270,24 +277,24 @@ export class UpsRateProvider {
         body: "grant_type=client_credentials",
       });
     } catch (error: unknown) {
-      return { ok: false, error: `token endpoint error: ${error instanceof Error ? error.message : String(error)}` };
+      return { ok: false, error: upsError("AUTH", `token endpoint error: ${error instanceof Error ? error.message : String(error)}`) };
     }
 
     if (!response.ok) {
-      return { ok: false, error: `UPS auth token error (${response.status})` };
+      return { ok: false, error: upsError("AUTH", `UPS auth token error (${response.status})`) };
     }
 
     let json: unknown;
     try {
       json = await response.json();
     } catch {
-      return { ok: false, error: "Failed to parse token response as JSON" };
+      return { ok: false, error: upsError("AUTH", "Failed to parse token response as JSON") };
     }
 
     const body = json as Record<string, unknown>;
     const accessToken = body?.access_token;
     if (typeof accessToken !== "string") {
-      return { ok: false, error: "token response missing access_token" };
+      return { ok: false, error: upsError("AUTH", "token response missing access_token") };
     }
 
     const rawExpiry = body.expires_in;

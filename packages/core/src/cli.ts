@@ -80,14 +80,14 @@ export function createProgram(deps: ProgramDeps): Command {
         if (result.ok) {
           deps.write(JSON.stringify(result.data));
         } else {
-          deps.write(JSON.stringify({ ok: false, error: result.error }));
+          deps.write(JSON.stringify({ ok: false, error: result.error.message }));
         }
         return;
       }
 
       if (!result.ok) {
         try {
-          program.error(`Error: ${result.error}`, { exitCode: 1 });
+          program.error(`Error: ${result.error.message}`, { exitCode: 1 });
         } catch {
           // exitOverride throws — expected
         }

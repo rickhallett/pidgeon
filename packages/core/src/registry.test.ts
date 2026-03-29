@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import type { CarrierProvider, RateRequest, RateQuote, Result } from "./index.js";
+import type { CarrierProvider, CarrierResult, RateRequest, RateQuote } from "./index.js";
 
 /**
  * BUILD_ORDER Step 11 — Multi-carrier extensibility.
@@ -23,7 +23,7 @@ const DOMESTIC_REQUEST: RateRequest = {
 
 function fakeProvider(carrier: string, charge: number): CarrierProvider {
   return {
-    async getRates(): Promise<Result<RateQuote[]>> {
+    async getRates(): Promise<CarrierResult<RateQuote[]>> {
       return {
         ok: true,
         data: [
@@ -47,8 +47,8 @@ function fakeProvider(carrier: string, charge: number): CarrierProvider {
 
 function failingProvider(carrier: string, error: string): CarrierProvider {
   return {
-    async getRates(): Promise<Result<RateQuote[]>> {
-      return { ok: false, error };
+    async getRates(): Promise<CarrierResult<RateQuote[]>> {
+      return { ok: false, error: { code: "UNKNOWN", message: error, carrier, retriable: false } };
     },
   };
 }
@@ -218,7 +218,7 @@ describe("registry: multi-carrier getRates", () => {
 
     // Each provider takes 100ms
     const slowProvider = (carrier: string): CarrierProvider => ({
-      async getRates(): Promise<Result<RateQuote[]>> {
+      async getRates(): Promise<CarrierResult<RateQuote[]>> {
         await new Promise((r) => setTimeout(r, 100));
         return { ok: true, data: [{ carrier, serviceCode: "GND", serviceName: `${carrier} Ground`, totalCharge: 10, currency: "USD", transitDays: 3, estimatedDelivery: null, billableWeight: { value: 1, unit: "LBS" }, surcharges: [], guaranteed: false }] };
       },

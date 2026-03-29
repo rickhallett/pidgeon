@@ -76,7 +76,7 @@ describe("error paths: network failures", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("network");
+    expect(result.error.message).toContain("network");
   });
 
   it("returns error when fetch rejects with DNS resolution failure", async () => {
@@ -88,7 +88,7 @@ describe("error paths: network failures", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("network");
+    expect(result.error.message).toContain("network");
   });
 
   it("returns error when request times out", async () => {
@@ -100,7 +100,7 @@ describe("error paths: network failures", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("timeout");
+    expect(result.error.message).toContain("timeout");
   });
 });
 
@@ -131,8 +131,8 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("111210");
-    expect(result.error).toContain("unavailable between the selected locations");
+    expect(result.error.message).toContain("111210");
+    expect(result.error.message).toContain("unavailable between the selected locations");
   });
 
   it("returns auth error on 401 Unauthorized", async () => {
@@ -147,7 +147,7 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("auth");
+    expect(result.error.message).toContain("auth");
   });
 
   it("returns error on 403 Forbidden", async () => {
@@ -162,7 +162,7 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("Blocked Merchant");
+    expect(result.error.message).toContain("Blocked Merchant");
   });
 
   it("returns rate-limit error on 429 with retriable hint", async () => {
@@ -180,7 +180,7 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("rate limit");
+    expect(result.error.message).toContain("rate limit");
   });
 
   it("returns error on 500 Internal Server Error", async () => {
@@ -195,7 +195,7 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("500");
+    expect(result.error.message).toContain("500");
   });
 
   it("returns error on 503 Service Unavailable", async () => {
@@ -210,7 +210,7 @@ describe("error paths: HTTP error responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("503");
+    expect(result.error.message).toContain("503");
   });
 });
 
@@ -229,7 +229,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("parse");
+    expect(result.error.message).toContain("parse");
   });
 
   it("returns error when response is valid JSON but empty object", async () => {
@@ -244,7 +244,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("RateResponse");
+    expect(result.error.message).toContain("RateResponse");
   });
 
   it("returns error when RatedShipment is missing from response", async () => {
@@ -264,7 +264,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("RatedShipment");
+    expect(result.error.message).toContain("RatedShipment");
   });
 
   it("returns error when TotalCharges.MonetaryValue is not a parseable number", async () => {
@@ -297,7 +297,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("monetary");
+    expect(result.error.message).toContain("monetary");
   });
 
   it("returns error when shipment element is missing TimeInTransit", async () => {
@@ -324,7 +324,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("TimeInTransit");
+    expect(result.error.message).toContain("TimeInTransit");
   });
 
   it("returns error on 400 with HTML body", async () => {
@@ -339,7 +339,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("400");
+    expect(result.error.message).toContain("400");
   });
 
   it("returns error when surcharge MonetaryValue is unparseable", async () => {
@@ -383,6 +383,6 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("surcharge");
+    expect(result.error.message).toContain("surcharge");
   });
 });

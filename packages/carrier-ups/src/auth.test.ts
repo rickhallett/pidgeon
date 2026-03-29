@@ -293,7 +293,7 @@ describe("auth lifecycle: error paths", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("auth");
+    expect(result.error.message).toContain("auth");
   });
 
   it("returns error when token endpoint returns 200 with non-JSON body", async () => {
@@ -317,7 +317,7 @@ describe("auth lifecycle: error paths", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("parse token response");
+    expect(result.error.message).toContain("parse token response");
   });
 
   it("returns error when token endpoint is unreachable", async () => {
@@ -336,7 +336,7 @@ describe("auth lifecycle: error paths", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("token");
+    expect(result.error.message).toContain("token");
   });
 
   it("returns error when token response is missing access_token field", async () => {
@@ -349,6 +349,6 @@ describe("auth lifecycle: error paths", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("token");
+    expect(result.error.message).toContain("token");
   });
 });

@@ -2,9 +2,20 @@
 
 // --- Result type ---
 
-export type Result<T> =
+export type Result<T, E = string> =
   | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly error: string };
+  | { readonly ok: false; readonly error: E };
+
+// --- Carrier error ---
+
+export type CarrierErrorCode = 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'VALIDATION' | 'TIMEOUT' | 'PROVIDER' | 'UNKNOWN';
+
+export type CarrierError = {
+  readonly code: CarrierErrorCode;
+  readonly message: string;
+  readonly carrier: string;
+  readonly retriable: boolean;
+};
 
 // --- Address ---
 
@@ -64,8 +75,10 @@ export type RateQuote = {
 
 // --- Carrier abstraction ---
 
+export type CarrierResult<T> = Result<T, CarrierError>;
+
 export type CarrierProvider = {
-  getRates(request: RateRequest): Promise<Result<RateQuote[]>>;
+  getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>>;
 };
 
 // --- Zod schemas ---

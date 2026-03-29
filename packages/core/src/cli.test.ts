@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import type { RateRequest, RateQuote, Result } from "./index.js";
+import type { CarrierResult, RateRequest, RateQuote } from "./index.js";
 
 /**
  * BUILD_ORDER Step 10 — CLI.
@@ -18,7 +18,7 @@ import type { RateRequest, RateQuote, Result } from "./index.js";
 
 // --- Fake provider ---
 
-type GetRatesFn = (request: RateRequest) => Promise<Result<RateQuote[]>>;
+type GetRatesFn = (request: RateRequest) => Promise<CarrierResult<RateQuote[]>>;
 
 function fakeProvider(getRates: GetRatesFn) {
   return { getRates };
@@ -199,7 +199,7 @@ describe("cli: output formatting", () => {
 
 describe("cli: error handling", () => {
   it("displays provider error message on failure", async () => {
-    const provider = fakeProvider(async () => ({ ok: false, error: "UPS auth error (401): Invalid Access Token" }));
+    const provider = fakeProvider(async () => ({ ok: false, error: { code: "AUTH" as const, message: "UPS auth error (401): Invalid Access Token", carrier: "UPS", retriable: false } }));
     const output = captureOutput();
 
     const { createProgram } = await import("./cli.js");
@@ -211,7 +211,7 @@ describe("cli: error handling", () => {
   });
 
   it("sets non-zero exit code on provider failure", async () => {
-    const provider = fakeProvider(async () => ({ ok: false, error: "Network timeout" }));
+    const provider = fakeProvider(async () => ({ ok: false, error: { code: "TIMEOUT" as const, message: "Network timeout", carrier: "UPS", retriable: true } }));
     const output = captureOutput();
 
     const { createProgram } = await import("./cli.js");
@@ -377,7 +377,7 @@ describe("cli: json output", () => {
   });
 
   it("outputs JSON error object on provider failure with --json", async () => {
-    const provider = fakeProvider(async () => ({ ok: false, error: "UPS HTTP error (500)" }));
+    const provider = fakeProvider(async () => ({ ok: false, error: { code: "PROVIDER" as const, message: "UPS HTTP error (500)", carrier: "UPS", retriable: true } }));
     const output = captureOutput();
 
     const { createProgram } = await import("./cli.js");

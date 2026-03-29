@@ -212,7 +212,7 @@ describe("http retry: max attempts", () => {
     expect(ratingCallCount()).toBeGreaterThan(1);
     expect(ratingCallCount()).toBeLessThanOrEqual(4); // reasonable max: initial + 3 retries
     // Error message should contain the status code from the last failure
-    expect(result.error).toContain("500");
+    expect(result.error.message).toContain("500");
   });
 
   it("recovers when the last attempt succeeds", async () => {
@@ -374,7 +374,7 @@ describe("http retry: timeout", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("timeout");
+    expect(result.error.message).toContain("timeout");
     // All attempts should time out — timeout is a transient failure like
     // network errors and 5xx, so the retry loop should exhaust max attempts.
     expect(ratingCalls).toBe(4);

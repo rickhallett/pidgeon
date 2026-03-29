@@ -1,4 +1,4 @@
-import type { CarrierProvider, RateRequest, RateQuote, Result } from "./index.js";
+import type { CarrierError, CarrierProvider, CarrierResult, RateRequest, RateQuote, Result } from "./index.js";
 
 export class CarrierRegistry {
   private readonly providers = new Map<string, CarrierProvider>();
@@ -30,12 +30,15 @@ export class CarrierRegistry {
 
     const results = await Promise.all(
       [...this.providers.values()].map((p) =>
-        p.getRates(request).catch((err: unknown): Result<RateQuote[]> => ({ ok: false, error: String(err) })),
+        p.getRates(request).catch((err: unknown): CarrierResult<RateQuote[]> => ({
+          ok: false,
+          error: { code: "UNKNOWN", message: String(err), carrier: "unknown", retriable: false },
+        })),
       ),
     );
 
     const quotes: RateQuote[] = [];
-    const errors: string[] = [];
+    const errors: CarrierError[] = [];
 
     for (const result of results) {
       if (result.ok) {
@@ -46,7 +49,7 @@ export class CarrierRegistry {
     }
 
     if (quotes.length === 0) {
-      return { ok: false, error: errors.join("; ") };
+      return { ok: false, error: errors.map((e) => e.message).join("; ") };
     }
 
     return { ok: true, data: quotes };
