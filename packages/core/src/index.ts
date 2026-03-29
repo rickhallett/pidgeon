@@ -56,6 +56,9 @@ export type CarrierResult<T> = Result<T, CarrierError>;
 
 export type CarrierProvider = {
   getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>>;
+  createLabel?(request: unknown): Promise<CarrierResult<unknown>>;
+  validateAddress?(address: Address): Promise<CarrierResult<Address>>;
+  getTracking?(trackingNumber: string): Promise<CarrierResult<unknown>>;
 };
 
 // --- Aggregated result ---
