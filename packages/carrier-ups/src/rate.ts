@@ -84,7 +84,9 @@ export class UpsRateProvider {
         retryAfterMs = 0;
       }
 
+      const requestBody = this.buildRequestBody(request);
       this.logger?.info("rating request", { url: this.ratingUrl, attempt });
+      this.logger?.debug("request payload", { body: requestBody });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -98,7 +100,7 @@ export class UpsRateProvider {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${tokenResult.data}`,
             },
-            body: JSON.stringify(this.buildRequestBody(request)),
+            body: JSON.stringify(requestBody),
             signal: controller.signal,
           }),
           new Promise<never>((_, reject) => {
@@ -165,6 +167,7 @@ export class UpsRateProvider {
       } catch {
         return { ok: false, error: upsError("PROVIDER", "Failed to parse UPS response as JSON") };
       }
+      this.logger?.debug("response payload", { body: json });
       const mapped = this.mapResponse(json);
       if (mapped.ok) {
         this.logger?.info("rating success", { quoteCount: mapped.data.length });
@@ -179,8 +182,10 @@ export class UpsRateProvider {
     const status = response.status;
 
     let upsMessage = "";
+    let errorBody: unknown = "unparseable";
     try {
       const body = await response.json() as UpsErrorEnvelope;
+      errorBody = body;
       const errors = body?.response?.errors;
       if (Array.isArray(errors) && errors.length > 0) {
         upsMessage = errors.map((e) => `${e.code}: ${e.message}`).join("; ");
@@ -188,6 +193,7 @@ export class UpsRateProvider {
     } catch {
       // Body isn't parseable JSON (e.g., 500 with plain text)
     }
+    this.logger?.debug("error response", { status, body: errorBody });
 
     if (status === 401) {
       this.cachedToken = null;
