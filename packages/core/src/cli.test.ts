@@ -32,6 +32,7 @@ const SAMPLE_QUOTES: RateQuote[] = [
     totalCharge: 12.5,
     currency: "USD",
     transitDays: 3,
+    estimatedDelivery: null,
     billableWeight: { value: 2, unit: "LBS" },
     surcharges: [{ type: "FUEL", amount: 1.25 }],
     guaranteed: false,
@@ -43,6 +44,7 @@ const SAMPLE_QUOTES: RateQuote[] = [
     totalCharge: 28.75,
     currency: "USD",
     transitDays: 2,
+    estimatedDelivery: null,
     billableWeight: { value: 2, unit: "LBS" },
     surcharges: [],
     guaranteed: true,
@@ -62,10 +64,12 @@ function captureOutput(): { lines: string[]; write: (text: string) => void } {
 // Standard args for a valid rate command
 const VALID_RATE_ARGS = [
   "node", "pidgeon", "rate",
+  "--origin-street", "123 Main St",
   "--origin-postal", "21093",
   "--origin-country", "US",
   "--origin-city", "Timonium",
   "--origin-state", "MD",
+  "--dest-street", "456 Oak Ave",
   "--dest-postal", "30005",
   "--dest-country", "US",
   "--dest-city", "Alpharetta",
@@ -322,9 +326,11 @@ describe("cli: error handling", () => {
     // Remove --origin-postal from args
     const argsWithoutOrigin = [
       "node", "pidgeon", "rate",
+      "--origin-street", "123 Main St",
       "--origin-country", "US",
       "--origin-city", "Timonium",
       "--origin-state", "MD",
+      "--dest-street", "456 Oak Ave",
       "--dest-postal", "30005",
       "--dest-country", "US",
       "--dest-city", "Alpharetta",

@@ -9,6 +9,7 @@ export type Result<T> =
 // --- Address ---
 
 export type Address = {
+  readonly street: string;
   readonly postalCode: string;
   readonly countryCode: string;
   readonly city: string;
@@ -40,6 +41,7 @@ export type RateRequest = {
   readonly origin: Address;
   readonly destination: Address;
   readonly packages: readonly Package[];
+  readonly serviceCode?: string;
 };
 
 export type Surcharge = {
@@ -53,7 +55,8 @@ export type RateQuote = {
   readonly serviceName: string;
   readonly totalCharge: number;
   readonly currency: string;
-  readonly transitDays: number;
+  readonly transitDays: number | null;
+  readonly estimatedDelivery: Date | null;
   readonly billableWeight: Weight;
   readonly surcharges: readonly Surcharge[];
   readonly guaranteed: boolean;

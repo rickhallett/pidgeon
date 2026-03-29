@@ -193,9 +193,19 @@ export class UpsRateProvider {
           return { ok: false, error: "Invalid response: missing TimeInTransit data" };
         }
 
-        const transitDays = parseInt(timeInTransit.EstimatedArrival.BusinessDaysInTransit, 10);
-        if (Number.isNaN(transitDays)) {
-          return { ok: false, error: "Invalid response: unparseable transit days" };
+        const rawTransitDays = parseInt(timeInTransit.EstimatedArrival.BusinessDaysInTransit, 10);
+        const transitDays = Number.isNaN(rawTransitDays) ? null : rawTransitDays;
+
+        const arrival = timeInTransit.EstimatedArrival.Arrival;
+        let estimatedDelivery: Date | null = null;
+        if (arrival?.Date) {
+          const y = arrival.Date.slice(0, 4);
+          const m = arrival.Date.slice(4, 6);
+          const d = arrival.Date.slice(6, 8);
+          const parsed = new Date(`${y}-${m}-${d}`);
+          if (!Number.isNaN(parsed.getTime())) {
+            estimatedDelivery = parsed;
+          }
         }
 
         const surcharges: Array<{ type: string; amount: number }> = [];
@@ -216,6 +226,7 @@ export class UpsRateProvider {
           totalCharge,
           currency: shipment.TotalCharges.CurrencyCode,
           transitDays,
+          estimatedDelivery,
           billableWeight: {
             value: weight,
             unit: shipment.BillingWeight.UnitOfMeasurement.Code,
@@ -339,6 +350,7 @@ export class UpsRateProvider {
 
   private mapAddress(address: Address): unknown {
     return {
+      AddressLine: address.street,
       City: address.city,
       StateProvinceCode: address.state,
       PostalCode: address.postalCode,
@@ -377,6 +389,10 @@ type UpsRatedShipment = {
     ServiceSummary: {
       Service: { Description: string };
       EstimatedArrival: {
+        Arrival?: {
+          Date?: string;
+          Time?: string;
+        };
         BusinessDaysInTransit: string;
       };
       GuaranteedIndicator?: string;

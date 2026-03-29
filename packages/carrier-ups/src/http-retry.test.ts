@@ -41,8 +41,8 @@ const TOKEN_RESPONSE = {
 };
 
 const DOMESTIC_REQUEST: RateRequest = {
-  origin: { postalCode: "21093", countryCode: "US", city: "Timonium", state: "MD" },
-  destination: { postalCode: "30005", countryCode: "US", city: "Alpharetta", state: "GA" },
+  origin: { street: "123 Main St", postalCode: "21093", countryCode: "US", city: "Timonium", state: "MD" },
+  destination: { street: "456 Oak Ave", postalCode: "30005", countryCode: "US", city: "Alpharetta", state: "GA" },
   packages: [{ weight: { value: 1, unit: "lb" }, dimensions: { length: 5, width: 5, height: 5, unit: "in" } }],
 };
 

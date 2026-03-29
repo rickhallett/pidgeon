@@ -16,8 +16,8 @@ import type { CarrierProvider, RateRequest, RateQuote, Result } from "./index.js
 // --- Fake providers ---
 
 const DOMESTIC_REQUEST: RateRequest = {
-  origin: { postalCode: "21093", countryCode: "US", city: "Timonium", state: "MD" },
-  destination: { postalCode: "30005", countryCode: "US", city: "Alpharetta", state: "GA" },
+  origin: { street: "123 Main St", postalCode: "21093", countryCode: "US", city: "Timonium", state: "MD" },
+  destination: { street: "456 Oak Ave", postalCode: "30005", countryCode: "US", city: "Alpharetta", state: "GA" },
   packages: [{ weight: { value: 1, unit: "lb" }, dimensions: { length: 5, width: 5, height: 5, unit: "in" } }],
 };
 
@@ -34,6 +34,7 @@ function fakeProvider(carrier: string, charge: number): CarrierProvider {
             totalCharge: charge,
             currency: "USD",
             transitDays: 3,
+            estimatedDelivery: null,
             billableWeight: { value: 1, unit: "LBS" },
             surcharges: [],
             guaranteed: false,
@@ -219,7 +220,7 @@ describe("registry: multi-carrier getRates", () => {
     const slowProvider = (carrier: string): CarrierProvider => ({
       async getRates(): Promise<Result<RateQuote[]>> {
         await new Promise((r) => setTimeout(r, 100));
-        return { ok: true, data: [{ carrier, serviceCode: "GND", serviceName: `${carrier} Ground`, totalCharge: 10, currency: "USD", transitDays: 3, billableWeight: { value: 1, unit: "LBS" }, surcharges: [], guaranteed: false }] };
+        return { ok: true, data: [{ carrier, serviceCode: "GND", serviceName: `${carrier} Ground`, totalCharge: 10, currency: "USD", transitDays: 3, estimatedDelivery: null, billableWeight: { value: 1, unit: "LBS" }, surcharges: [], guaranteed: false }] };
       },
     });
 

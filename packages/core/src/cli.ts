@@ -17,10 +17,12 @@ export function createProgram(deps: ProgramDeps): Command {
   program
     .command("rate")
     .description("Get shipping rate quotes")
+    .requiredOption("--origin-street <street>", "Origin street address")
     .requiredOption("--origin-postal <code>", "Origin postal code")
     .requiredOption("--origin-country <code>", "Origin country code")
     .requiredOption("--origin-city <city>", "Origin city")
     .requiredOption("--origin-state <state>", "Origin state")
+    .requiredOption("--dest-street <street>", "Destination street address")
     .requiredOption("--dest-postal <code>", "Destination postal code")
     .requiredOption("--dest-country <code>", "Destination country code")
     .requiredOption("--dest-city <city>", "Destination city")
@@ -51,12 +53,14 @@ export function createProgram(deps: ProgramDeps): Command {
 
       const request: RateRequest = {
         origin: {
+          street: opts.originStreet,
           postalCode: opts.originPostal,
           countryCode: opts.originCountry,
           city: opts.originCity,
           state: opts.originState,
         },
         destination: {
+          street: opts.destStreet,
           postalCode: opts.destPostal,
           countryCode: opts.destCountry,
           city: opts.destCity,
@@ -97,8 +101,9 @@ export function createProgram(deps: ProgramDeps): Command {
 
       for (const quote of result.data) {
         const guaranteed = quote.guaranteed ? " [Guaranteed]" : "";
+        const transit = quote.transitDays != null ? `${quote.transitDays} day(s)` : "N/A";
         deps.write(
-          `${quote.serviceName}  ${quote.totalCharge.toFixed(2)} ${quote.currency}  ${quote.transitDays} day(s)${guaranteed}`,
+          `${quote.serviceName}  ${quote.totalCharge.toFixed(2)} ${quote.currency}  ${transit}${guaranteed}`,
         );
       }
     });

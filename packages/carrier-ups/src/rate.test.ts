@@ -82,12 +82,14 @@ describe("walking skeleton", () => {
 
     const request: RateRequest = {
       origin: {
+        street: "123 Main St",
         postalCode: "21093",
         countryCode: "US",
         city: "Timonium",
         state: "MD",
       },
       destination: {
+        street: "456 Oak Ave",
         postalCode: "30005",
         countryCode: "US",
         city: "Alpharetta",
