@@ -233,18 +233,17 @@ describe("auth lifecycle: token invalidation", () => {
 // --- Token refresh ---
 
 describe("auth lifecycle: token refresh", () => {
-  it("re-acquires a fresh token when the cached token has expired", async () => {
+  it("uses the new token on rating requests after refresh", async () => {
     let tokenCallCount = 0;
-    const tokens = ["first-token", "second-token"];
+    const ratingHeaders: string[] = [];
 
     const fakeFetch: FetchFn = async (input, init) => {
       const url = String(input);
 
       if (url.includes("/oauth/token")) {
-        const token = tokens[tokenCallCount] ?? "fallback-token";
         tokenCallCount++;
         return new Response(JSON.stringify({
-          access_token: token,
+          access_token: `token-v${tokenCallCount}`,
           token_type: "Bearer",
           expires_in: 1, // expires in 1 second
         }), {
@@ -252,6 +251,10 @@ describe("auth lifecycle: token refresh", () => {
           headers: { "Content-Type": "application/json" },
         });
       }
+
+      // Capture the Authorization header on rating calls
+      const headers = init?.headers as Record<string, string> | undefined;
+      ratingHeaders.push(headers?.["Authorization"] ?? "");
 
       return new Response(JSON.stringify(MINIMAL_UPS_RESPONSE), {
         status: 200,
@@ -261,16 +264,18 @@ describe("auth lifecycle: token refresh", () => {
 
     const provider = makeProvider(fakeFetch);
 
-    // First call acquires "first-token"
+    // First call acquires token-v1
     await provider.getRates(DOMESTIC_REQUEST);
     expect(tokenCallCount).toBe(1);
+    expect(ratingHeaders[0]).toBe("Bearer token-v1");
 
-    // Wait for expiry (1 second + buffer)
+    // Wait for expiry
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
-    // Second call should acquire "second-token"
+    // Second call acquires token-v2, must use it
     await provider.getRates(DOMESTIC_REQUEST);
     expect(tokenCallCount).toBe(2);
+    expect(ratingHeaders[1]).toBe("Bearer token-v2");
   });
 });
 
@@ -312,7 +317,7 @@ describe("auth lifecycle: error paths", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("parse");
+    expect(result.error).toContain("parse token response");
   });
 
   it("returns error when token endpoint is unreachable", async () => {
