@@ -1,0 +1,60 @@
+// @pidgeon/core — entry point
+
+// --- Result type ---
+
+export type Result<T> =
+  | { readonly ok: true; readonly data: T }
+  | { readonly ok: false; readonly error: string };
+
+// --- Address ---
+
+export type Address = {
+  readonly postalCode: string;
+  readonly countryCode: string;
+  readonly city: string;
+  readonly state: string;
+};
+
+// --- Package ---
+
+export type Weight = {
+  readonly value: number;
+  readonly unit: string;
+};
+
+export type Dimensions = {
+  readonly length: number;
+  readonly width: number;
+  readonly height: number;
+  readonly unit: string;
+};
+
+export type Package = {
+  readonly weight: Weight;
+  readonly dimensions: Dimensions;
+};
+
+// --- Rate Request / Quote ---
+
+export type RateRequest = {
+  readonly origin: Address;
+  readonly destination: Address;
+  readonly packages: readonly Package[];
+};
+
+export type Surcharge = {
+  readonly type: string;
+  readonly amount: number;
+};
+
+export type RateQuote = {
+  readonly carrier: string;
+  readonly serviceCode: string;
+  readonly serviceName: string;
+  readonly totalCharge: number;
+  readonly currency: string;
+  readonly transitDays: number;
+  readonly billableWeight: Weight;
+  readonly surcharges: readonly Surcharge[];
+  readonly guaranteed: boolean;
+};

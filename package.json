@@ -1,0 +1,8 @@
+{
+  "name": "pidgeon",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "devDependencies": {
+    "bun-types": "^1.3.11"
+  }
+}

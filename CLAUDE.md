@@ -1,4 +1,6 @@
-# Pidgeon
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Multi-carrier shipping integration service. TypeScript, bun workspaces, outside-in TDD.
 
@@ -10,6 +12,7 @@ Multi-carrier shipping integration service. TypeScript, bun workspaces, outside-
 - **No git stash** — forbidden. Use a branch.
 - **No interactive git** — no `git rebase -i`, no `git commit` without `-m`. Use `GIT_EDITOR=true` if needed.
 - **Atomic commits** — one concern per commit. Stowaway changes are a code smell.
+- **Never work on main** — all work happens on a branch. Branch naming: `feature/`, `hotfix/`, `chore/`, `refactor/`, `test/`, `docs/` prefix + short kebab-case description (e.g. `feature/ups-rate-request`, `hotfix/token-refresh-race`, `chore/update-deps`). Create the branch before the first commit of new work.
 - **TDD discipline** — no implementation without a failing test demanding it. Red → green → refactor.
 
 ## Project Structure
@@ -29,9 +32,11 @@ pidgeon/
 ## Development
 
 ```bash
-bun install            # Install deps
-bun test               # Run all tests
-bun run build          # Build all packages
+bun install                          # Install deps
+bun test                             # Run all tests
+bun test packages/core               # Run tests for one package
+bun test packages/carrier-ups/src/auth.test.ts  # Run a single test file
+bun run build                        # Build all packages
 ```
 
 ## Key Files
@@ -43,6 +48,23 @@ bun run build          # Build all packages
 | Build sequence | `BUILD_ORDER.md` |
 | UPS API shapes | `docs/ups-api-reference.md` |
 
+## Architecture
+
+- **Dependency direction:** `@pidgeon/core` ← `@pidgeon/carrier-ups`. Never import from a carrier package into core.
+- **Carrier abstraction:** `CarrierProvider` interface in core with `getRates()` required; optional `createLabel?()`, `validateAddress?()`, `getTracking?()`. Simple factory maps carrier name → provider.
+- **Boundary contract:** `getRates()` returns `Result<RateQuote[]>`, never throws. Internal code may throw; caught and wrapped at the boundary.
+- **Validation:** Zod schemas in core, validated at service boundary before any external call.
+- **HTTP:** Native fetch, no external HTTP dependency. Retry, backoff, timeout, 429 handling in a thin wrapper.
+
+## TypeScript Conventions
+
+- `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalProperties: true`
+- Named exports only — no default exports.
+- No `enum` — use `as const` objects or union types.
+- `unknown` over `any`. `readonly` on types that shouldn't be mutated.
+- Explicit return types on exported functions.
+- Carrier packages import from `@pidgeon/core` via package name, not relative paths.
+
 ## Agents
 
 If the task matches an agent's responsibility and that agent isn't already loaded, dispatch to it.
@@ -53,6 +75,27 @@ If the task matches an agent's responsibility and that agent isn't already loade
 | `tester` | Writes failing tests. Evaluates test quality. Owns the red step. |
 | `adversarial-reviewer` | Finds bugs and security issues. Does not confirm correctness. |
 | `janitor` | Refactors for readability and idiomatic TypeScript. Does not add functionality. |
+
+## Adversarial Reviews
+
+Reports live in `docs/reviews/`. Filename convention:
+
+```
+<scope>-<YYYYMMDD>-<HHMMSS>-<model>.md
+```
+
+- **scope** — what was reviewed (e.g. `walking-skeleton`, `auth-lifecycle`, `error-paths`)
+- **timestamp** — UTC, when the review was produced
+- **model** — which model produced it: `claude`, `codex`, `gemini`, `grok`, etc.
+
+Examples:
+```
+docs/reviews/walking-skeleton-20260329-143012-claude.md
+docs/reviews/error-paths-20260330-091500-codex.md
+docs/reviews/auth-lifecycle-20260401-220000-gemini.md
+```
+
+Cross-family reviews (Evidence Hierarchy rank 4) are more useful than same-model reviews (rank 5). When scheduling reviews, prefer a model from a different family than the one that wrote the code.
 
 ## Context Window
 
