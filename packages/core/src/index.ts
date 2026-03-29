@@ -73,6 +73,15 @@ export type RateQuote = {
   readonly guaranteed: boolean;
 };
 
+// --- Logger ---
+
+export type Logger = {
+  debug(msg: string, meta?: Record<string, unknown>): void;
+  info(msg: string, meta?: Record<string, unknown>): void;
+  warn(msg: string, meta?: Record<string, unknown>): void;
+  error(msg: string, meta?: Record<string, unknown>): void;
+};
+
 // --- Carrier abstraction ---
 
 export type CarrierResult<T> = Result<T, CarrierError>;
