@@ -58,3 +58,9 @@ export type RateQuote = {
   readonly surcharges: readonly Surcharge[];
   readonly guaranteed: boolean;
 };
+
+// --- Carrier abstraction ---
+
+export type CarrierProvider = {
+  getRates(request: RateRequest): Promise<Result<RateQuote[]>>;
+};
