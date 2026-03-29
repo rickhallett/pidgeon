@@ -219,11 +219,6 @@ decisions:
       type accepts globalThis.fetch (structurally compatible) but also accepts
       simple arrow functions in tests without double-casting through unknown.
       Resolves Claude review finding #2 (HIGH) about the double-cast workaround.
-    note: >
-      Test files (rate.test.ts, rate-errors.test.ts) still use typeof globalThis.fetch
-      in their makeProvider helpers. Tester needs to update to FetchFn import.
-      Build (tsconfig.build.json) excludes tests so this doesn't block dist output.
-      typecheck will report errors in test files until the tester updates them.
 
   - id: 017
     date: 2026-03-29
@@ -264,20 +259,187 @@ decisions:
       should be inferred from the code itself (e.g., does the try/catch exist?),
       not from reading a report that says it was added.
 
-  - id: 019
+deferred:
+
+  - id: D001
     date: 2026-03-29
-    title: Step 5 (response normalisation) next, then step 8 (retry/backoff)
-    choice: >
-      Resume BUILD_ORDER with step 5 on feature/response-normalisation branch.
-      Multi-service mapping, GuaranteedIndicator, edge cases in quote mapping.
-      Step 8 (retry, backoff, timeout wrapper) follows after step 5.
-    alternatives:
-      - Jump to step 8 (HTTP wrapper) to close Retry-After carried finding
-      - Jump to step 9 (Zod validation) to close schema-related deferrals
+    title: Retry-After HTTP-date parsing
+    status: deferred
+    defer_to: future
+    source:
+      - claude
+      - codex
     rationale: >
-      Step 5 completes the rating flow end-to-end before adding infrastructure
-      (retry, validation). It also closes the GuaranteedIndicator finding
-      carried as open across 4 adversarial review rounds. The mapper
-      infrastructure exists from steps 2+6; step 5 deepens coverage.
-      Step 8 is the next cross-cutting concern (like auth was) and should
-      follow once the rating response surface is fully mapped.
+      Current implementation parses integer seconds only. Team assessment is
+      that UPS uses delta-seconds in practice, so HTTP-date support is a lower
+      priority compatibility improvement rather than a current correctness blocker.
+    follow_up_trigger: >
+      Revisit if UPS sends HTTP-date Retry-After values in the wild, or during
+      broader HTTP transport hardening.
+
+  - id: D002
+    date: 2026-03-29
+    title: Rating 401 should reacquire token and retry once
+    status: deferred
+    defer_to: design decision
+    source:
+      - codex
+    open_question: >
+      Does transparent auth refresh include a one-time retry when the rating
+      endpoint returns 401 after token acquisition?
+    rationale: >
+      This is not deferred as low-value cleanup; it requires an explicit product
+      decision. The PRD says token refresh should be transparent to callers, but
+      the current implementation treats 401 from the rating endpoint as terminal
+      (clears cache, returns error). Adding a one-time reacquire-and-retry path
+      would satisfy the PRD requirement but conflates auth retry with HTTP retry —
+      two different concerns with different retry semantics. Current retry tests
+      intentionally assert that 401 is never retried until this behavior is specified.
+    follow_up_trigger: >
+      Resolve before closing HTTP retry/auth integration work. If yes, implement
+      as a focused change with its own test — not folded into the HTTP retry loop.
+
+  - id: D003
+    date: 2026-03-29
+    title: Retry policy configuration injection
+    status: deferred
+    defer_to: BUILD_ORDER step 9
+    source:
+      - claude
+      - codex
+    rationale: >
+      Retry count, timeout, backoff base, and Retry-After cap are hardcoded for
+      now. This is acceptable for the current slice, but production tuning
+      should move into configuration rather than code edits.
+    follow_up_trigger: >
+      Implement when configuration/schema work is resumed in step 9.
+
+  - id: D004
+    date: 2026-03-29
+    title: Negative or zero Retry-After handling
+    status: deferred
+    defer_to: low practical risk
+    source:
+      - claude
+    rationale: >
+      Edge-case handling for invalid Retry-After values was judged low risk
+      relative to the current scope. Existing backoff behavior remains a safe
+      fallback.
+    follow_up_trigger: >
+      Revisit during transport hardening or if malformed upstream headers are observed.
+
+  - id: D005
+    date: 2026-03-29
+    title: Retry policy for corrupt 200 response bodies
+    status: deferred
+    defer_to: rare edge case
+    source:
+      - claude
+    rationale: >
+      Retrying malformed success bodies is uncommon and not clearly correct
+      without stronger upstream evidence. The current behavior returns a parse
+      failure immediately.
+    follow_up_trigger: >
+      Revisit if UPS intermittently serves corrupt 200 bodies or if transport
+      policy is expanded to distinguish retriable parse failures.
+
+  - id: D006
+    date: 2026-03-29
+    title: Extract transient/permanent retry helpers
+    status: deferred
+    defer_to: janitor pass
+    source:
+      - gemini
+    rationale: >
+      Helper extraction would improve readability but does not materially reduce
+      current correctness risk.
+    follow_up_trigger: >
+      Revisit during cleanup/refactor work after retry behavior is stable.
+
+  - id: D007
+    date: 2026-03-29
+    title: Structured carrier error types at the provider boundary
+    status: deferred
+    defer_to: future
+    source:
+      - gemini
+      - carried
+    rationale: >
+      The current boundary contract is Result<T> with string errors. Moving to
+      structured error payloads is a larger API decision and should be handled
+      deliberately rather than folded into the current implementation steps.
+    follow_up_trigger: >
+      Revisit when evolving the public error contract beyond string messages.
+
+  - id: D008
+    date: 2026-03-29
+    title: Update remaining tests to use FetchFn instead of typeof globalThis.fetch
+    status: deferred
+    defer_to: test cleanup
+    source:
+      - carried
+    rationale: >
+      The production code moved to a narrower FetchFn type, but some tests still
+      need the helper signatures updated. Build output is unaffected because test
+      files are excluded from the build config, so this is follow-up cleanup
+      rather than a blocking architectural issue.
+    follow_up_trigger: >
+      Revisit during test cleanup or when enabling full-repo typecheck over test files.
+
+  - id: D009
+    date: 2026-03-29
+    title: Remaining BUILD_ORDER sequencing after response normalisation
+    status: deferred
+    defer_to: roadmap
+    source:
+      - carried
+    rationale: >
+      The old entry was a forward-looking work plan, not a settled architectural
+      decision. Sequencing of the next implementation steps belongs in backlog
+      tracking rather than the decisions ledger.
+    follow_up_trigger: >
+      Revisit when planning the next implementation slice after the current branch.
+
+  - id: D010
+    date: 2026-03-29
+    title: Meta-review of development process
+    status: deferred
+    defer_to: post-implementation review
+    source:
+      - carried
+    rationale: >
+      This is a planned evaluation activity, not an architectural or product
+      decision. Keeping it in deferred work makes the log more coherent.
+    follow_up_trigger: >
+      Revisit once implementation is stable enough for a repository-history review.
+
+  - id: D011
+    date: 2026-03-29
+    title: Hindsight review of external libraries versus hand-rolled primitives
+    status: deferred
+    defer_to: post-implementation review
+    source:
+      - carried
+    rationale: >
+      This is a retrospective question for later evaluation, not a present-tense
+      decision already taken by the project.
+    follow_up_trigger: >
+      Revisit when assessing long-term maintenance cost after the current build is complete.
+
+  - id: D012
+    date: 2026-03-29
+    title: Inject mock delay to eliminate wall-clock cost of retry/timeout tests
+    status: deferred
+    defer_to: janitor pass
+    source:
+      - claude
+      - triage round 6
+    rationale: >
+      The timeout retry test runs 4 attempts × 3s real timeouts plus exponential
+      backoff delays, adding ~14s of wall-clock time to the suite (total went from
+      15s to 27s). Injecting a mock delay function would make retry and backoff
+      tests instant and deterministic, eliminating both the time cost and the
+      timing-sensitive fragility flagged in the Claude MEDIUM finding. This is a
+      test infrastructure improvement — no production code change needed.
+    follow_up_trigger: >
+      Address during janitor pass after HTTP retry behavior is stable and committed.

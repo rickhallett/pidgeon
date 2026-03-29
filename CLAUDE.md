@@ -75,6 +75,8 @@ If the task matches an agent's responsibility and that agent isn't already loade
 | `tester` | Writes failing tests. Evaluates test quality. Owns the red step. |
 | `adversarial-reviewer` | Finds bugs and security issues. Does not confirm correctness. |
 | `janitor` | Refactors for readability and idiomatic TypeScript. Does not add functionality. |
+| `meta-reviewer` | Reviews the build process and git history at the end of the build order. |
+| `library-hindsight-reviewer` | Reviews build-vs-buy decisions at the end of the build order. |
 
 ## Adversarial Reviews
 
