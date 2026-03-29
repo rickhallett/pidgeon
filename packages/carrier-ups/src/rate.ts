@@ -1,4 +1,4 @@
-import type { Address, RateRequest, RateQuote, Result } from "@pidgeon/core";
+import type { Address, CarrierProvider, RateRequest, RateQuote, Result } from "@pidgeon/core";
 
 type UpsCredentials = {
   readonly clientId: string;
@@ -356,6 +356,9 @@ export class UpsRateProvider {
     return map[unit] ?? unit.toUpperCase();
   }
 }
+
+// Compile-time check: UpsRateProvider structurally satisfies CarrierProvider
+null! as UpsRateProvider satisfies CarrierProvider;
 
 // --- UPS response types (minimal, shaped by the test fixture) ---
 

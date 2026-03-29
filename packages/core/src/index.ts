@@ -64,3 +64,7 @@ export type RateQuote = {
 export type CarrierProvider = {
   getRates(request: RateRequest): Promise<Result<RateQuote[]>>;
 };
+
+// --- Registry ---
+
+export { CarrierRegistry } from "./registry.js";
