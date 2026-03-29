@@ -1,5 +1,5 @@
 import { RateRequestSchema } from "@pidgeon/core";
-import type { Address, CarrierError, CarrierProvider, CarrierResult, RateRequest, RateQuote } from "@pidgeon/core";
+import type { Address, CarrierError, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote } from "@pidgeon/core";
 
 type UpsCredentials = {
   readonly clientId: string;
@@ -27,6 +27,7 @@ type UpsRateProviderConfig = {
   readonly retry?: RetryConfig;
   readonly urls?: UrlConfig;
   readonly tokenExpiryBufferSeconds?: number;
+  readonly logger?: Logger;
 };
 
 function upsError(code: CarrierError['code'], message: string, retriable = false): CarrierError {
@@ -43,6 +44,7 @@ export class UpsRateProvider {
   private readonly ratingUrl: string;
   private readonly tokenUrl: string;
   private readonly tokenExpiryBufferSeconds: number;
+  private readonly logger: Logger | undefined;
   private cachedToken: { accessToken: string; expiresAt: number } | null = null;
 
   constructor(config: UpsRateProviderConfig) {
@@ -55,6 +57,7 @@ export class UpsRateProvider {
     this.ratingUrl = config.urls?.rating ?? "https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit";
     this.tokenUrl = config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token";
     this.tokenExpiryBufferSeconds = config.tokenExpiryBufferSeconds ?? 60;
+    this.logger = config.logger;
   }
 
   async getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>> {
@@ -80,6 +83,8 @@ export class UpsRateProvider {
         await new Promise((r) => setTimeout(r, Math.max(backoff, retryAfterMs)));
         retryAfterMs = 0;
       }
+
+      this.logger?.info("rating request", { url: this.ratingUrl, attempt });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -132,16 +137,22 @@ export class UpsRateProvider {
               retryAfterMs = seconds * 1000;
             }
           }
+          this.logger?.warn("retry", { attempt, status, retryAfterMs });
           lastResult = await this.handleHttpError(response);
           continue;
         }
 
         if (status >= 500) {
+          this.logger?.warn("retry", { attempt, status, retryAfterMs: 0 });
           lastResult = await this.handleHttpError(response);
           continue;
         }
 
-        return this.handleHttpError(response);
+        const httpResult = await this.handleHttpError(response);
+        if (!httpResult.ok) {
+          this.logger?.error("request failed", { code: httpResult.error.code, message: httpResult.error.message });
+        }
+        return httpResult;
       }
 
       let json: unknown;
@@ -150,7 +161,11 @@ export class UpsRateProvider {
       } catch {
         return { ok: false, error: upsError("PROVIDER", "Failed to parse UPS response as JSON") };
       }
-      return this.mapResponse(json);
+      const mapped = this.mapResponse(json);
+      if (mapped.ok) {
+        this.logger?.info("rating success", { quoteCount: mapped.data.length });
+      }
+      return mapped;
     }
 
     return lastResult ?? { ok: false, error: upsError("UNKNOWN", "Max retries exceeded", true) };
@@ -274,6 +289,7 @@ export class UpsRateProvider {
 
   private async acquireToken(): Promise<CarrierResult<string>> {
     const { clientId, clientSecret } = this.credentials;
+    this.logger?.info("acquiring token");
 
     let response: Response;
     try {
@@ -312,6 +328,7 @@ export class UpsRateProvider {
       accessToken,
       expiresAt: Date.now() + Math.max(0, expiresIn - this.tokenExpiryBufferSeconds) * 1000,
     };
+    this.logger?.info("token acquired", { expiresIn });
 
     return { ok: true, data: accessToken };
   }
