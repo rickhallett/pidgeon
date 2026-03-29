@@ -1,4 +1,4 @@
-import type { RateRequest, RateQuote, Result } from "@pidgeon/core";
+import type { Address, RateRequest, RateQuote, Result } from "@pidgeon/core";
 
 type UpsCredentials = {
   readonly clientId: string;
@@ -23,7 +23,7 @@ export class UpsRateProvider {
   async getRates(request: RateRequest): Promise<Result<RateQuote[]>> {
     let response: Response;
     try {
-      response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Rate", {
+      response = await this.config.fetch("https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(this.buildRequestBody(request)),
@@ -139,9 +139,75 @@ export class UpsRateProvider {
     return { ok: true, data: quotes };
   }
 
-  private buildRequestBody(_request: RateRequest): unknown {
-    // Minimal stub — request building is Step 4 in BUILD_ORDER
-    return {};
+  private buildRequestBody(request: RateRequest): unknown {
+    return {
+      RateRequest: {
+        Request: {
+          RequestOption: "Shoptimeintransit",
+          SubVersion: "2108",
+        },
+        Shipment: {
+          Shipper: {
+            ShipperNumber: this.config.credentials.accountNumber,
+            Address: this.mapAddress(request.origin),
+          },
+          ShipTo: {
+            Address: this.mapAddress(request.destination),
+          },
+          ShipFrom: {
+            Address: this.mapAddress(request.origin),
+          },
+          PaymentDetails: {
+            ShipmentCharge: {
+              Type: "01",
+              BillShipper: {
+                AccountNumber: this.config.credentials.accountNumber,
+              },
+            },
+          },
+          NumOfPieces: String(request.packages.length),
+          Package: request.packages.map((pkg) => ({
+            PackagingType: {
+              Code: "02",
+              Description: "Packaging",
+            },
+            Dimensions: {
+              UnitOfMeasurement: {
+                Code: this.mapDimensionUnit(pkg.dimensions.unit),
+              },
+              Length: String(pkg.dimensions.length),
+              Width: String(pkg.dimensions.width),
+              Height: String(pkg.dimensions.height),
+            },
+            PackageWeight: {
+              UnitOfMeasurement: {
+                Code: this.mapWeightUnit(pkg.weight.unit),
+              },
+              Weight: String(pkg.weight.value),
+            },
+          })),
+        },
+      },
+    };
+  }
+
+  private mapAddress(address: Address): unknown {
+    return {
+      City: address.city,
+      StateProvinceCode: address.state,
+      PostalCode: address.postalCode,
+      CountryCode: address.countryCode,
+    };
+  }
+
+  private mapWeightUnit(unit: string): string {
+    const map: Record<string, string> = { lb: "LBS", kg: "KGS", oz: "OZS" };
+    return map[unit] ?? unit.toUpperCase();
+  }
+
+  private mapDimensionUnit(unit: string): string {
+    const map: Record<string, string> = { in: "IN", cm: "CM" };
+    return map[unit] ?? unit.toUpperCase();
   }
 }
 
