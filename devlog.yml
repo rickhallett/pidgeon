@@ -1,0 +1,167 @@
+# Pidgeon Development Log
+# Architectural decisions, trade-offs, and rationale.
+# Machine-queryable by design.
+
+decisions:
+
+  - id: 001
+    date: 2026-03-29
+    title: Bun over pnpm + tsup
+    choice: bun workspaces + bun build + bun test
+    alternatives:
+      - pnpm + tsup (industry standard, maximum reviewer familiarity)
+      - pnpm + turborepo (cached parallel tasks — overkill for this scope)
+      - nx (heavy scaffolding, wrong signal)
+    rationale: >
+      Speed and minimal config for both developer and reviewer.
+      Bun covers package management, builds, and testing natively.
+    production_note: >
+      pnpm + tsup is likely the better choice within enterprise —
+      broader toolchain compatibility, more battle-tested for library publishing,
+      and no assumption about the consumer's runtime.
+
+  - id: 002
+    date: 2026-03-29
+    title: Hybrid carrier abstraction over pure strategy or plugin pattern
+    choice: Interface-based with optional methods + simple factory
+    alternatives:
+      - Pure strategy pattern (rigid — all carriers must implement all methods)
+      - Runtime plugin registry (over-engineered, runtime type safety gaps)
+    rationale: >
+      Choosing flexibility and less setup over what might be the most useful
+      (but also most matured) production pattern. The hybrid lets carriers
+      support different subsets of operations without forcing method stubs.
+      A real system at scale might evolve toward runtime registration.
+
+  - id: 003
+    date: 2026-03-29
+    title: Native fetch over HTTP client libraries
+    choice: Bun native fetch with hand-rolled retry/timeout wrapper
+    alternatives:
+      - ky (tiny fetch wrapper — saves ~15 lines)
+      - got (full-featured Node HTTP client — enterprise incumbent)
+      - axios (legacy, heavy for what it does)
+    rationale: >
+      No external HTTP dependency. Building a library/SDK — not forcing
+      an HTTP dep on consumers is a feature. Hand-rolled wrapper demonstrates
+      understanding of HTTP mechanics (retry, backoff, timeout, 429 handling).
+
+  - id: 004
+    date: 2026-03-29
+    title: Types via core, not separate package
+    choice: Domain types exported from @pidgeon/core
+    alternatives:
+      - Separate @pidgeon/types package (useful when external consumers need types only)
+    rationale: >
+      No external consumers — this is a privately scoped package. Core re-exports
+      types. import type erases at build time so there's no runtime cost.
+      A mature system with external consumers might split types out.
+
+  - id: 005
+    date: 2026-03-29
+    title: Hybrid error handling
+    choice: Result<T> at provider boundaries, custom error classes internally
+    alternatives:
+      - Error classes only (idiomatic but invisible in type signatures)
+      - Result type only (explicit but verbose and fights JS conventions)
+    rationale: >
+      Provider boundary never throws — returns Result<T>. Internal code may throw,
+      caught and wrapped at the boundary. Caller gets type-safe error handling.
+      Internal code stays idiomatic. Demonstrates understanding of both paradigms.
+
+  - id: 006
+    date: 2026-03-29
+    title: Reactive rate limiting
+    choice: 429 detection with Retry-After parsing + exponential backoff
+    alternatives:
+      - Proactive client-side rate limiter (token bucket / sliding window)
+      - Both proactive + reactive
+    rationale: >
+      Reactive piggybacks on existing retry logic — minimal additional code.
+      Works without knowing carrier limits in advance. Proactive rate limiting
+      (token bucket) is a scale consideration — documented as production improvement.
+
+  - id: 007
+    date: 2026-03-29
+    title: In-memory OAuth token cache
+    choice: In-memory with expiry tracking
+    alternatives:
+      - File-backed persistence
+      - Redis-backed (shared across fleet instances)
+    rationale: >
+      OAuth client-credentials tokens are cheap to re-acquire on restart.
+      A cold start costs one HTTP call. Redis-backed caching is a production
+      concern for multi-instance deployments — documented, not implemented.
+
+  - id: 008
+    date: 2026-03-29
+    title: Commander for CLI
+    choice: commander (declarative subcommands, auto-generated help)
+    alternatives:
+      - Raw process.argv parsing (~15 lines for simple case)
+      - yargs (heavier, more features than needed)
+      - bun util.parseArgs (no subcommand routing)
+    rationale: >
+      The brief says the team extends this over time. Commander gives
+      declarative subcommand registration — the next dev adds a command
+      without understanding argv internals. Tiny, stable, zero transitive deps,
+      and the next engineer has used it before.
+
+  - id: 009
+    date: 2026-03-29
+    title: Realistic UPS payloads over simplified stubs
+    choice: Test fixtures based on real UPS API documentation payloads
+    alternatives:
+      - Hand-crafted simplified payloads
+    rationale: >
+      Simplified stubs would break on transition to actual payloads.
+      Using realistic payloads from docs means normalisation logic is
+      shaped to handle real-world structure from day one.
+      Focus on the 20% of payload surface that covers 80%+ of use cases.
+
+  - id: 010
+    date: 2026-03-29
+    title: Normalised RateQuote field set
+    choice: >
+      carrier, serviceCode, serviceName, totalCharge, currency,
+      estimatedDelivery, transitDays, surcharges[], billableWeight, guaranteed
+    alternatives:
+      - Minimal (price + service only)
+      - Exhaustive (zone, rate type, negotiated vs published, exchange rates)
+    rationale: >
+      Callers considered: checkout UI, order management, shipping cost calculator,
+      multi-carrier comparison engine, finance/invoice reconciliation.
+      This field set covers the 80/20 across all of them. Zone and rate type
+      are nice-to-haves worth adding when a specific caller needs them.
+
+  - id: 011
+    date: 2026-03-29
+    title: Zod config validation at startup
+    choice: Single config module with Zod schema, validated on load
+    alternatives:
+      - Raw process.env reads scattered across modules
+      - dotenv + manual validation
+    rationale: >
+      Proactive measure against config sprawl. Fails fast on missing/invalid
+      config. Single source of truth. Type-safe config object flows through
+      the application.
+
+  - id: 012
+    date: 2026-03-29
+    title: Public repo
+    choice: Public GitHub repository
+    alternatives:
+      - Private with collaborator invite (extra click for reviewer)
+    rationale: >
+      Zero friction for reviewer — click link, see code. Doubles as portfolio work.
+      No company name or challenge framing in the repo.
+
+  - id: 013
+    date: 2026-03-29
+    title: devlog.yml over DEVLOG.md
+    choice: YAML-structured decision log
+    alternatives:
+      - Markdown prose (DEVLOG.md)
+    rationale: >
+      Structured data, not prose. Machine-queryable — LLMs and scripts
+      can grep it. Humans can read it too.
