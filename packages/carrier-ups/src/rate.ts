@@ -121,6 +121,10 @@ export class UpsRateProvider {
       if (!response.ok) {
         const status = response.status;
 
+        // On 401 with a non-retried auth: invalidate cached token and start
+        // a fresh request cycle (including transient-error retries) with a
+        // new token. The isAuthRetry flag prevents infinite recursion —
+        // a second 401 goes through handleHttpError and returns immediately.
         if (status === 401 && !isAuthRetry) {
           this.cachedToken = null;
           return this.executeWithToken(request, true);
