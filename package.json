@@ -2,7 +2,13 @@
   "name": "pidgeon",
   "private": true,
   "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "bun run --cwd packages/core build && bun run --cwd packages/carrier-ups build",
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/carrier-ups typecheck",
+    "test": "bun test"
+  },
   "devDependencies": {
-    "bun-types": "^1.3.11"
+    "bun-types": "^1.3.11",
+    "typescript": "^6.0.2"
   }
 }
