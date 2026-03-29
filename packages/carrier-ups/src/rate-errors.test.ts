@@ -309,7 +309,7 @@ describe("error paths: malformed responses", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toBeDefined();
+    expect(result.error).toContain("TimeInTransit");
   });
 
   it("returns error on 400 with HTML body", async () => {

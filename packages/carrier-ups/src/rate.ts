@@ -89,51 +89,55 @@ export class UpsRateProvider {
 
     const quotes: RateQuote[] = [];
     for (const shipment of ratedShipments as UpsRatedShipment[]) {
-      const totalCharge = parseFloat(shipment.TotalCharges?.MonetaryValue);
-      if (Number.isNaN(totalCharge)) {
-        return { ok: false, error: `Invalid response: unparseable monetary value "${shipment.TotalCharges?.MonetaryValue}"` };
-      }
-
-      const weight = parseFloat(shipment.BillingWeight?.Weight);
-      if (Number.isNaN(weight)) {
-        return { ok: false, error: `Invalid response: unparseable weight "${shipment.BillingWeight?.Weight}"` };
-      }
-
-      const timeInTransit = shipment.TimeInTransit?.ServiceSummary;
-      if (!timeInTransit) {
-        return { ok: false, error: "Invalid response: missing TimeInTransit data" };
-      }
-
-      const transitDays = parseInt(timeInTransit.EstimatedArrival.BusinessDaysInTransit, 10);
-      if (Number.isNaN(transitDays)) {
-        return { ok: false, error: "Invalid response: unparseable transit days" };
-      }
-
-      const surcharges: Array<{ type: string; amount: number }> = [];
-      for (const pkg of shipment.RatedPackage ?? []) {
-        for (const charge of pkg.ItemizedCharges ?? []) {
-          const amount = parseFloat(charge.MonetaryValue);
-          if (Number.isNaN(amount)) {
-            return { ok: false, error: `Invalid response: unparseable surcharge amount "${charge.MonetaryValue}"` };
-          }
-          surcharges.push({ type: charge.SubType, amount });
+      try {
+        const totalCharge = parseFloat(shipment.TotalCharges?.MonetaryValue);
+        if (Number.isNaN(totalCharge)) {
+          return { ok: false, error: `Invalid response: unparseable monetary value "${shipment.TotalCharges?.MonetaryValue}"` };
         }
-      }
 
-      quotes.push({
-        carrier: "UPS",
-        serviceCode: shipment.Service.Code,
-        serviceName: timeInTransit.Service.Description,
-        totalCharge,
-        currency: shipment.TotalCharges.CurrencyCode,
-        transitDays,
-        billableWeight: {
-          value: weight,
-          unit: shipment.BillingWeight.UnitOfMeasurement.Code,
-        },
-        surcharges,
-        guaranteed: timeInTransit.GuaranteedIndicator !== "",
-      });
+        const weight = parseFloat(shipment.BillingWeight?.Weight);
+        if (Number.isNaN(weight)) {
+          return { ok: false, error: `Invalid response: unparseable weight "${shipment.BillingWeight?.Weight}"` };
+        }
+
+        const timeInTransit = shipment.TimeInTransit?.ServiceSummary;
+        if (!timeInTransit) {
+          return { ok: false, error: "Invalid response: missing TimeInTransit data" };
+        }
+
+        const transitDays = parseInt(timeInTransit.EstimatedArrival.BusinessDaysInTransit, 10);
+        if (Number.isNaN(transitDays)) {
+          return { ok: false, error: "Invalid response: unparseable transit days" };
+        }
+
+        const surcharges: Array<{ type: string; amount: number }> = [];
+        for (const pkg of shipment.RatedPackage ?? []) {
+          for (const charge of pkg.ItemizedCharges ?? []) {
+            const amount = parseFloat(charge.MonetaryValue);
+            if (Number.isNaN(amount)) {
+              return { ok: false, error: `Invalid response: unparseable surcharge amount "${charge.MonetaryValue}"` };
+            }
+            surcharges.push({ type: charge.SubType, amount });
+          }
+        }
+
+        quotes.push({
+          carrier: "UPS",
+          serviceCode: shipment.Service.Code,
+          serviceName: timeInTransit.Service.Description,
+          totalCharge,
+          currency: shipment.TotalCharges.CurrencyCode,
+          transitDays,
+          billableWeight: {
+            value: weight,
+            unit: shipment.BillingWeight.UnitOfMeasurement.Code,
+          },
+          surcharges,
+          guaranteed: timeInTransit.GuaranteedIndicator !== "",
+        });
+      } catch (error: unknown) {
+        return { ok: false, error: `Invalid response: malformed shipment data (${error instanceof Error ? error.message : String(error)})` };
+      }
     }
 
     return { ok: true, data: quotes };
@@ -143,7 +147,7 @@ export class UpsRateProvider {
     return {
       RateRequest: {
         Request: {
-          RequestOption: "Shoptimeintransit",
+          RequestOption: "Shop",
           SubVersion: "2108",
         },
         Shipment: {
@@ -164,6 +168,9 @@ export class UpsRateProvider {
                 AccountNumber: this.config.credentials.accountNumber,
               },
             },
+          },
+          DeliveryTimeInformation: {
+            PackageBillType: "03",
           },
           NumOfPieces: String(request.packages.length),
           Package: request.packages.map((pkg) => ({
@@ -212,12 +219,6 @@ export class UpsRateProvider {
 }
 
 // --- UPS response types (minimal, shaped by the test fixture) ---
-
-type UpsRateResponseEnvelope = {
-  RateResponse: {
-    RatedShipment: UpsRatedShipment[];
-  };
-};
 
 type UpsRatedShipment = {
   Service: { Code: string };
