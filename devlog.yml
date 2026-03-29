@@ -165,3 +165,25 @@ decisions:
     rationale: >
       Structured data, not prose. Machine-queryable — LLMs and scripts
       can grep it. Humans can read it too.
+
+  - id: 014
+    date: 2026-03-29
+    title: Outside-in build order over boundary-first
+    choice: Walking skeleton → deepen layers → extract abstractions
+    alternatives:
+      - Bottom-up boundary-first (types → schemas → errors → config → http → interface → implementation → tests)
+    rationale: >
+      Boundary-first is a classic LLM-favoured ordering — clean on paper,
+      assembles pieces in isolation, then hopes they compose at integration.
+      Unpleasant surprises live at the seams, and you don't hit seams until
+      step 10 when you've already committed to shapes that might not fit.
+      Outside-in starts with the use case, forces the vertical slice into
+      existence immediately, and deepens from a working through-line.
+      Types, errors, and config are extracted from working code —
+      not prescribed before you know what you need.
+    correction: >
+      Initial build order was revised after recognising the bottom-up
+      approach optimised for responsibility boundaries at the expense of
+      encountering unanticipated complexity early. The outside-in approach
+      hits integration boundaries first with a walking skeleton, then
+      refactors inward with confidence that the shape holds.

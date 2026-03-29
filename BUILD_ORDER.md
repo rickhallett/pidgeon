@@ -1,59 +1,59 @@
 # Build Order
 
-Red-green-red TDD. Each step is one or more atomic commits.
-Test first, implement, commit. No skipping ahead.
+Outside-in TDD. Walking skeleton first, then deepen.
+Types, errors, and config are extracted from working code, not prescribed upfront.
+Each step is one or more atomic commits. Test first, implement, commit.
 
 ## 1. Scaffold
 Monorepo structure, bun workspaces, tsconfig, .gitignore.
 No code — just the skeleton.
 
-## 2. Core domain types
-Address, Package, RateRequest, RateQuote, ServiceLevel.
-Types only — no validation, no logic.
+## 2. Walking skeleton (red)
+One test: "given a rate request, get back a normalised rate quote."
+Forces the entire vertical slice into existence as minimal shells —
+types, provider interface, UPS implementation, HTTP call, response mapping.
+Nothing works yet, but the shape of the system exists end-to-end.
 
-## 3. Zod schemas
-Runtime validation schemas for all domain types.
-Tests: valid input passes, invalid input fails with structured errors.
+## 3. Walking skeleton (green)
+Hardcode everything. Fake HTTP response, hardcoded mapping, types just
+wide enough to compile. The test goes green. Working through-line to
+refactor into.
 
-## 4. Error types
-CarrierError base class + subclasses (Auth, RateLimit, Network, Validation, Timeout).
-Result<T> type. Tests: error construction, instanceof checks, Result narrowing.
+## 4. Real request building
+Test that domain input produces correct UPS API payload shape.
+Types and Zod schemas for the request side emerge here because
+they're needed, not because they're next on a list.
 
-## 5. Config module
-Zod-validated config from env vars. .env.example.
-Tests: valid config loads, missing required vars throws at startup.
+## 5. Real response normalisation
+Test that a realistic UPS response payload maps to RateQuote.
+Types and schemas for the response side emerge here.
+Surcharges, billing weight, guaranteed delivery.
 
-## 6. HTTP layer
-Fetch wrapper: retry with exponential backoff, timeout, 429 handling, sanitised logging.
-Tests: retry behaviour, backoff timing, timeout, 429 → Retry-After, log sanitisation.
+## 6. Error paths
+Now that happy path works, break it. Network timeout, 429, 401,
+malformed JSON, validation failure. Error classes and Result type
+emerge from actual failure modes, not from a taxonomy designed upfront.
 
-## 7. Carrier interface
-CarrierProvider interface (getRates required, optional createLabel/validateAddress/getTracking).
-CarrierFactory: register + resolve by name.
-Tests: factory registration, resolution, unknown carrier error.
+## 7. Auth lifecycle
+Token acquisition, caching, refresh on expiry.
+Layered onto the working skeleton — not a standalone module.
 
-## 8. UPS auth
-OAuth 2.0 client-credentials: token acquisition, in-memory cache, transparent refresh.
-Tests: acquires token, reuses cached token, refreshes expired token, handles auth failure.
+## 8. HTTP hardening
+Retry with exponential backoff, 429 handling, timeout, sanitised logging.
+Layered onto working skeleton, tested against real failure scenarios
+already defined in step 6.
 
-## 9. UPS rate mapper
-Request builder: domain types → UPS API request payload.
-Response normaliser: UPS API response → RateQuote[].
-Tests: request shape matches UPS spec, response parsed into normalised quotes.
+## 9. Config
+Extract hardcoded values into Zod-validated config.
+Comes late because now we know what actually needs configuring.
 
-## 10. UPS provider
-Wire auth + HTTP + mapper into CarrierProvider implementation.
-getRates: validate → authenticate → build request → call API → normalise → return Result.
-Tests: full happy path, auth failure, network error, malformed response, 429.
+## 10. CLI
+Commander-based. Wire the working service into a `rate` subcommand.
+Real service to call, not a demo of imaginary plumbing.
 
-## 11. Integration tests
-End-to-end with stubbed fetch. Realistic UPS payloads from docs.
-Covers: request building, response parsing, auth lifecycle, error paths.
+## 11. Multi-carrier extensibility
+Extract the carrier interface from the concrete UPS implementation.
+Factory/registry. Refactored from working code, not designed in the abstract.
 
-## 12. CLI
-Commander-based. `rate` subcommand exercising the real service.
-Stubbed HTTP for demo. Help text, structured output.
-
-## 13. README + polish
-Design decisions, how to run, what you'd improve.
-Final .env.example review. Commit history cleanup if needed.
+## 12. Polish
+README, .env.example, final test coverage review, commit history check.
