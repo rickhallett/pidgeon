@@ -187,3 +187,22 @@ decisions:
       encountering unanticipated complexity early. The outside-in approach
       hits integration boundaries first with a walking skeleton, then
       refactors inward with confidence that the shape holds.
+
+  - id: 015
+    date: 2026-03-29
+    title: Error boundary before request building (reorder steps 6 → 4 → 5 → 7)
+    choice: Implement error paths (BUILD_ORDER step 6) before request building (step 4)
+    alternatives:
+      - Follow original BUILD_ORDER sequence (4 → 5 → 6 → 7)
+    rationale: >
+      Three cross-family adversarial reviews (Claude, Codex, Gemini) independently
+      identified the missing error boundary as the highest-severity finding.
+      The Result<T> return type is decorative — getRates() throws on every
+      non-happy path. Building request logic and response normalization inside
+      a broken boundary means every new feature inherits the same flaw.
+      Establishing the try/catch boundary first means steps 4, 5, and 7
+      build inside a safe container rather than bolting error handling on after.
+    evidence: >
+      docs/reviews/walking-skeleton-20260329-141436-claude.md (CRITICAL),
+      docs/reviews/walking-skeleton-20260329-141449-codex.md (HIGH),
+      docs/reviews/walking-skeleton-20260329-153000-gemini.md (HIGH+MEDIUM)
