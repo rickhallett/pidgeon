@@ -21,6 +21,8 @@ export type CarrierError = {
 
 import type { Address, Weight, Dimensions, Package, RateRequest } from "./schemas.js";
 export type { Address, Weight, Dimensions, Package, RateRequest } from "./schemas.js";
+export type { WeightUnit, DimensionUnit } from "./schemas.js";
+export { WEIGHT_UNITS, DIMENSION_UNITS } from "./schemas.js";
 
 // --- Rate Quote ---
 

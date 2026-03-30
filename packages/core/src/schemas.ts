@@ -1,15 +1,21 @@
 import { z } from "zod";
 
+export const WEIGHT_UNITS = ["lb", "kg", "oz", "g"] as const;
+export type WeightUnit = (typeof WEIGHT_UNITS)[number];
+
+export const DIMENSION_UNITS = ["in", "cm", "mm"] as const;
+export type DimensionUnit = (typeof DIMENSION_UNITS)[number];
+
 export const WeightSchema = z.object({
   value: z.number().positive(),
-  unit: z.string().min(1),
+  unit: z.enum(WEIGHT_UNITS),
 });
 
 export const DimensionsSchema = z.object({
   length: z.number().positive(),
   width: z.number().positive(),
   height: z.number().positive(),
-  unit: z.string().min(1),
+  unit: z.enum(DIMENSION_UNITS),
 });
 
 export const PackageSchema = z.object({
