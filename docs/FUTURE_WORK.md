@@ -106,6 +106,60 @@ commits, especially for foundational code.
 
 ---
 
+## Refactoring Follow-ups
+
+Findings from cross-family reviews of the architecture-maintainability refactoring
+(Claude, Codex, Gemini — 2026-03-30). These items were not in scope for the
+refactoring but were surfaced by reviewers.
+
+### Token thundering herd
+**Priority:** MEDIUM
+
+`UpsTokenManager.getToken()` has no in-flight promise deduplication. Two concurrent
+`getRates()` calls seeing an expired token will both call `acquireToken()`, making
+duplicate OAuth requests. Standard fix: store the in-flight promise and reuse it.
+
+**Source:** Claude refactoring review
+
+### Unsafe type casts on UPS response
+**Priority:** MEDIUM
+
+`response-parser.ts` casts `json as Record<string, unknown>` and
+`ratedShipments as UpsRatedShipment[]` without Zod validation. Runtime null checks
+and try/catch mitigate, but a malformed UPS response produces a cryptic TypeError
+rather than a structured error identifying the missing field.
+
+**Source:** Claude refactoring review
+
+### Token management should use shared httpRequest
+**Priority:** MEDIUM
+
+`UpsTokenManager` implements its own fetch logic for token acquisition instead of
+using the shared `httpRequest()` from `@pidgeon/core`. Integrating it would unify
+retry, backoff, and logging for the token endpoint.
+
+**Source:** Gemini refactoring review
+
+### Unknown UPS weight codes silently become pounds
+**Priority:** MEDIUM
+
+`parseUpsWeightUnit()` in `response-parser.ts` defaults unrecognized UPS weight
+unit codes to `"lb"`. A code like `"GMS"` would silently map to pounds. Should
+either reject with a structured error or log a warning.
+
+**Source:** Codex refactoring review
+
+### Token expiry clock drift
+**Priority:** LOW
+
+Token expiry is calculated from local `Date.now()`. Clock skew between client and
+UPS server could cause premature or late token refresh. Mitigated by the existing
+`tokenExpiryBufferSeconds` (default 60s) and 401 retry logic, but not fully addressed.
+
+**Source:** Gemini refactoring review
+
+---
+
 ## Carriers
 
 ### FedEx, USPS, DHL
