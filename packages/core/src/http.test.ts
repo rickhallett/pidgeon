@@ -482,6 +482,36 @@ describe("httpRequest: error body parsing", () => {
     expect(result.error.message).toContain("Internal processing error");
   });
 
+  it("extracts message from { message } shape without errorBodyParser", async () => {
+    const config = baseConfig(staticFetch(fakeResponse(400, { message: "Invalid shipping address" })));
+
+    const result = await httpRequest(config, BASE_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("Invalid shipping address");
+  });
+
+  it("extracts message from { error: { message } } shape without errorBodyParser", async () => {
+    const config = baseConfig(staticFetch(fakeResponse(400, { error: { message: "Bad request" } })));
+
+    const result = await httpRequest(config, BASE_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("Bad request");
+  });
+
+  it("extracts message from { error: string } shape without errorBodyParser", async () => {
+    const config = baseConfig(staticFetch(fakeResponse(400, { error: "Something went wrong" })));
+
+    const result = await httpRequest(config, BASE_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("Something went wrong");
+  });
+
   it("handles unparseable error response body gracefully", async () => {
     const config = baseConfig(staticFetch(textResponse(400, "Bad Request")));
 

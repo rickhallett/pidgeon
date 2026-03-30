@@ -71,6 +71,19 @@ async function parseErrorBody(
   try {
     const body = await response.json();
     raw = body;
+    if (typeof body === "object" && body !== null) {
+      const b = body as Record<string, unknown>;
+      if (typeof b.message === "string") {
+        message = b.message;
+      } else if (typeof b.error === "string") {
+        message = b.error;
+      } else if (typeof b.error === "object" && b.error !== null) {
+        const err = b.error as Record<string, unknown>;
+        if (typeof err.message === "string") {
+          message = err.message;
+        }
+      }
+    }
   } catch {
     // Body is not parseable JSON
   }
@@ -139,8 +152,8 @@ export async function httpRequest(
       const status = response.status;
 
       if (status === 401) {
-        const { raw } = await parseErrorBody(response, logger);
-        const err = mapStatusToError(carrier, status, null, errorBodyParser, raw);
+        const { raw, message: bodyMessage } = await parseErrorBody(response, logger);
+        const err = mapStatusToError(carrier, status, bodyMessage, errorBodyParser, raw);
         logger?.error("request failed", { code: err.code, message: err.message });
         return { ok: false, error: err };
       }
@@ -160,28 +173,28 @@ export async function httpRequest(
           }
           if (delaySeconds !== null) {
             if (delaySeconds > maxRetryAfterSeconds) {
-              const { raw } = await parseErrorBody(response, logger);
-              const err = mapStatusToError(carrier, status, null, errorBodyParser, raw);
+              const { raw, message: bodyMessage } = await parseErrorBody(response, logger);
+              const err = mapStatusToError(carrier, status, bodyMessage, errorBodyParser, raw);
               return { ok: false, error: err };
             }
             retryAfterMs = delaySeconds * 1000;
           }
         }
         logger?.warn("retry", { attempt, status, retryAfterMs });
-        const { raw } = await parseErrorBody(response, logger);
-        lastResult = { ok: false, error: mapStatusToError(carrier, status, null, errorBodyParser, raw) };
+        const { raw, message: bodyMessage } = await parseErrorBody(response, logger);
+        lastResult = { ok: false, error: mapStatusToError(carrier, status, bodyMessage, errorBodyParser, raw) };
         continue;
       }
 
       if (status >= 500) {
         logger?.warn("retry", { attempt, status, retryAfterMs: 0 });
-        const { raw } = await parseErrorBody(response, logger);
-        lastResult = { ok: false, error: mapStatusToError(carrier, status, null, errorBodyParser, raw) };
+        const { raw, message: bodyMessage } = await parseErrorBody(response, logger);
+        lastResult = { ok: false, error: mapStatusToError(carrier, status, bodyMessage, errorBodyParser, raw) };
         continue;
       }
 
-      const { raw } = await parseErrorBody(response, logger);
-      const err = mapStatusToError(carrier, status, null, errorBodyParser, raw);
+      const { raw, message: bodyMessage } = await parseErrorBody(response, logger);
+      const err = mapStatusToError(carrier, status, bodyMessage, errorBodyParser, raw);
       logger?.error("request failed", { code: err.code, message: err.message });
       return { ok: false, error: err };
     }
