@@ -120,7 +120,7 @@ describe("walking skeleton", () => {
     expect(quote.totalCharge).toBe(12.36);
     expect(quote.currency).toBe("USD");
     expect(quote.transitDays).toBe(2);
-    expect(quote.billableWeight).toEqual({ value: 1.0, unit: "LBS" });
+    expect(quote.billableWeight).toEqual({ value: 1.0, unit: "lb" });
     expect(quote.surcharges).toEqual([
       { type: "Fuel Surcharge", amount: 2.10 },
     ]);

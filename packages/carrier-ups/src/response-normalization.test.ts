@@ -321,7 +321,7 @@ describe("response normalisation: billing weight", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.data[0]!.billableWeight).toEqual({ value: 7.5, unit: "KGS" });
+    expect(result.data[0]!.billableWeight).toEqual({ value: 7.5, unit: "kg" });
   });
 });
 

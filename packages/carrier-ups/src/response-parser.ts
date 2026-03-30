@@ -1,6 +1,16 @@
-import type { CarrierResult, ErrorBodyParser, RateQuote } from "@pidgeon/core";
+import type { CarrierResult, ErrorBodyParser, RateQuote, WeightUnit } from "@pidgeon/core";
 import { upsError } from "./types.js";
 import type { UpsRatedShipment, UpsErrorEnvelope } from "./types.js";
+
+const UPS_WEIGHT_TO_CANONICAL: Record<string, WeightUnit> = {
+  LBS: "lb",
+  KGS: "kg",
+  OZS: "oz",
+};
+
+function parseUpsWeightUnit(upsCode: string): WeightUnit {
+  return UPS_WEIGHT_TO_CANONICAL[upsCode] ?? "lb";
+}
 
 export const upsErrorBodyParser: ErrorBodyParser = (_status: number, body: unknown): string | null => {
   const envelope = body as UpsErrorEnvelope | null;
@@ -77,7 +87,7 @@ export function parseUpsRateResponse(json: unknown): CarrierResult<RateQuote[]> 
         estimatedDelivery,
         billableWeight: {
           value: weight,
-          unit: shipment.BillingWeight.UnitOfMeasurement.Code,
+          unit: parseUpsWeightUnit(shipment.BillingWeight.UnitOfMeasurement.Code),
         },
         surcharges,
         guaranteed: timeInTransit.GuaranteedIndicator != null && timeInTransit.GuaranteedIndicator !== "",
