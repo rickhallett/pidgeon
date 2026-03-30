@@ -75,10 +75,35 @@ Add `--json` for machine-readable output.
 
 Architectural decisions, trade-offs, and rationale are recorded in [`devlog.yml`](devlog.yml). Each entry includes the choice made, alternatives considered, and reasoning.
 
+## Key Takeaways
+
+This project was as much an exercise in AI-assisted development process as it was in shipping a carrier integration. Here's what I took away from ~70 commits, 48 review documents, and a full spec-to-ship cycle with multiple AI models.
+
+### On the code
+
+- **Error boundaries before features.** Implementing `Result<T>` at the provider boundary *before* deepening request/response logic prevented cascading failures and forced exhaustive error handling from the start. The build plan originally had this later; moving it up was the single most impactful sequencing decision.
+- **Zod as the single source of truth.** Using `z.infer` to bridge runtime validation and TypeScript types eliminated drift between API shapes and domain models. When the schema changed, types followed automatically.
+- **Extraction is riskier than greenfield.** Pulling the HTTP layer out of `carrier-ups` into core introduced three bugs despite a full test suite. The failure mode was assuming extraction is mechanical — it's not. Context changes correctness. Write the target interface first, then implement by referencing the old code, not by moving it.
+
+### On the process
+
+- **The plan is a live document.** `BUILD_ORDER.md` should have been updated at the moment I decided to resequence the error boundary, not reconstructed after the fact. A plan that doesn't reflect reality loses its value as a coordination artifact.
+- **TDD discipline is hard to sustain at machine speed.** Outside-in TDD was directionally correct, but several steps collapsed red and green into single commits. The evidence of test-driven work matters almost as much as the work itself — especially when the commit history is part of the deliverable.
+- **Triage > volume.** The most useful review pattern was: collect independent reviews, identify consensus and severity, decide what to fix now vs. defer, and record *why*. Without that filter, more review output just produces more noise.
+
+### On working with AI
+
+- **The operator's real job is triage, not coding.** Across the full build, AI did most of the writing. My highest-value actions were reordering the build plan after reviews, deciding which findings to fix vs. defer, and catching when "spec compliance" was nominal rather than behavioural. Decision quality matters more than output volume.
+- **Velocity outpaces verification by default.** AI writes fast. Reviews find issues fast. But the bottleneck is *deciding what to do about findings*. The fix isn't "slow down" — it's building forced pauses between roles. Commit the triage. Switch to coder. Commit the code. The pause between roles is where quality lives.
+- **Fresh context beats accumulated context.** The most valuable adversarial reviews started from scratch. Later rounds found fewer critical issues partly because the models had absorbed so much prior context they were anchored by it. The first cross-family review of a new slice is worth roughly 10× the third review of the same slice.
+- **Process rules are easier to write than to follow.** `CLAUDE.md` contains detailed rules: atomic commits, TDD discipline, never work on main, separate agent responsibilities. The meta-review found partial compliance. Maintaining discipline requires constant friction against the natural tendency — human and AI alike — to just ship the next thing. Next time, I'd either simplify the rules to what can actually be sustained, or build mechanical enforcement (pre-commit hooks, CI checks) rather than relying on discipline alone.
+
+The full learning log with additional detail lives in [`LEARNINGS.md`](LEARNINGS.md).
+
 ## Testing
 
 ```bash
-bun test                             # All tests (117 tests, 296 assertions)
+bun test                             # All tests (161 tests, 412 assertions)
 bun test packages/core               # Core package only
 bun test packages/carrier-ups        # UPS carrier package only
 ```
