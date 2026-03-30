@@ -214,6 +214,9 @@ export class UpsRateProvider {
     const { clientId, clientSecret } = this.credentials;
     this.logger?.info("acquiring token");
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
     let response: Response;
     try {
       response = await this.fetchFn(this.tokenUrl, {
@@ -223,10 +226,16 @@ export class UpsRateProvider {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: "grant_type=client_credentials",
+        signal: controller.signal,
       });
     } catch (error: unknown) {
+      clearTimeout(timeoutId);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return { ok: false, error: upsError("TIMEOUT", "token endpoint timeout", true) };
+      }
       return { ok: false, error: upsError("AUTH", `token endpoint error: ${error instanceof Error ? error.message : String(error)}`) };
     }
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return { ok: false, error: upsError("AUTH", `UPS auth token error (${response.status})`) };

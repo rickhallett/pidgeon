@@ -349,3 +349,66 @@ describe("auth lifecycle: error paths", () => {
     expect(result.error.message).toContain("token");
   });
 });
+
+// --- BUG D: Token endpoint has no timeout ---
+
+describe("auth lifecycle: token endpoint timeout", () => {
+  it("times out when the token endpoint hangs indefinitely", async () => {
+    // BUG D: acquireToken() calls this.fetchFn(this.tokenUrl, ...) with no
+    // AbortController/signal and no timeout. If the token endpoint hangs,
+    // the entire getRates() call hangs forever. This test verifies that
+    // a hanging token endpoint is bounded by a timeout.
+    const fakeFetch: FetchFn = async (input, init) => {
+      const url = String(input);
+
+      if (url.includes("/oauth/token")) {
+        // Simulate a hanging endpoint — respects abort signal if one is passed
+        return new Promise<Response>((resolve, reject) => {
+          const signal = init?.signal;
+          if (signal?.aborted) {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+            return;
+          }
+          const hangTimer = setTimeout(() => {
+            resolve(new Response(JSON.stringify(TOKEN_RESPONSE), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }));
+          }, 60_000); // would hang for 60s without timeout
+
+          signal?.addEventListener("abort", () => {
+            clearTimeout(hangTimer);
+            reject(new DOMException("The operation was aborted", "AbortError"));
+          });
+        });
+      }
+
+      return new Response(JSON.stringify(MINIMAL_UPS_RESPONSE), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    // Use the default timeoutMs (3000ms) — token endpoint should respect it
+    const provider = new UpsRateProvider({
+      fetch: fakeFetch,
+      credentials: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        accountNumber: "test-account",
+      },
+      retry: { maxAttempts: 1, baseDelayMs: 10, timeoutMs: 500, maxRetryAfterSeconds: 5 },
+    });
+
+    const start = Date.now();
+    const result = await provider.getRates(DOMESTIC_REQUEST);
+    const elapsed = Date.now() - start;
+
+    // Should fail with a timeout-related error, not hang for 60s
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message.toLowerCase()).toMatch(/timeout|abort|timed?\s*out/);
+    // Must complete well under the 60s hang time
+    expect(elapsed).toBeLessThan(5_000);
+  }, 10_000);
+});

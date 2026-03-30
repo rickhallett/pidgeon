@@ -100,7 +100,7 @@ export async function httpRequest(
       retryAfterMs = 0;
     }
 
-    logger?.info("rating request", { url: request.url, attempt });
+    logger?.info("http request", { url: request.url, attempt });
     logger?.debug("request payload", { body: request.body });
 
     const controller = new AbortController();
@@ -149,13 +149,22 @@ export async function httpRequest(
         const retryAfter = response.headers.get("Retry-After");
         if (retryAfter) {
           const seconds = parseInt(retryAfter, 10);
+          let delaySeconds: number | null = null;
           if (!Number.isNaN(seconds)) {
-            if (seconds > maxRetryAfterSeconds) {
+            delaySeconds = seconds;
+          } else {
+            const dateMs = Date.parse(retryAfter);
+            if (!Number.isNaN(dateMs)) {
+              delaySeconds = Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
+            }
+          }
+          if (delaySeconds !== null) {
+            if (delaySeconds > maxRetryAfterSeconds) {
               const { raw } = await parseErrorBody(response, logger);
               const err = mapStatusToError(carrier, status, null, errorBodyParser, raw);
               return { ok: false, error: err };
             }
-            retryAfterMs = seconds * 1000;
+            retryAfterMs = delaySeconds * 1000;
           }
         }
         logger?.warn("retry", { attempt, status, retryAfterMs });
