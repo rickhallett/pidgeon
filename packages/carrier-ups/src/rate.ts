@@ -2,6 +2,7 @@ import { RateRequestSchema, httpRequest } from "@pidgeon/core";
 import type { Address, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
 import { upsError } from "./types.js";
 import type { UpsCredentials, UpsRateProviderConfig, UpsRatedShipment, UpsErrorEnvelope } from "./types.js";
+import { UpsTokenManager } from "./auth.js";
 
 export type { FetchFn } from "@pidgeon/core";
 
@@ -22,10 +23,8 @@ export class UpsRateProvider {
   private readonly timeoutMs: number;
   private readonly maxRetryAfterSeconds: number;
   private readonly ratingUrl: string;
-  private readonly tokenUrl: string;
-  private readonly tokenExpiryBufferSeconds: number;
   private readonly logger: Logger | undefined;
-  private cachedToken: { accessToken: string; expiresAt: number } | null = null;
+  private readonly tokenManager: UpsTokenManager;
 
   constructor(config: UpsRateProviderConfig) {
     this.fetchFn = config.fetch;
@@ -35,9 +34,16 @@ export class UpsRateProvider {
     this.timeoutMs = config.retry?.timeoutMs ?? 3_000;
     this.maxRetryAfterSeconds = config.retry?.maxRetryAfterSeconds ?? 5;
     this.ratingUrl = config.urls?.rating ?? "https://onlinetools.ups.com/api/rating/v2409/Shoptimeintransit";
-    this.tokenUrl = config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token";
-    this.tokenExpiryBufferSeconds = config.tokenExpiryBufferSeconds ?? 60;
     this.logger = config.logger;
+    this.tokenManager = new UpsTokenManager({
+      fetchFn: config.fetch,
+      tokenUrl: config.urls?.token ?? "https://onlinetools.ups.com/security/v1/oauth/token",
+      clientId: config.credentials.clientId,
+      clientSecret: config.credentials.clientSecret,
+      timeoutMs: this.timeoutMs,
+      tokenExpiryBufferSeconds: config.tokenExpiryBufferSeconds ?? 60,
+      ...(config.logger !== undefined ? { logger: config.logger } : {}),
+    });
   }
 
   async getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>> {
@@ -51,7 +57,7 @@ export class UpsRateProvider {
   }
 
   private async executeWithToken(request: RateRequest, isAuthRetry: boolean): Promise<CarrierResult<RateQuote[]>> {
-    const tokenResult = await this.getToken();
+    const tokenResult = await this.tokenManager.getToken();
     if (!tokenResult.ok) return tokenResult;
 
     const requestBody = this.buildRequestBody(request);
@@ -82,7 +88,7 @@ export class UpsRateProvider {
 
     if (!result.ok) {
       if (result.error.code === "AUTH" && !isAuthRetry) {
-        this.cachedToken = null;
+        this.tokenManager.invalidate();
         return this.executeWithToken(request, true);
       }
       return result;
@@ -172,68 +178,6 @@ export class UpsRateProvider {
     }
 
     return { ok: true, data: quotes };
-  }
-
-  private async getToken(): Promise<CarrierResult<string>> {
-    if (this.cachedToken && Date.now() < this.cachedToken.expiresAt) {
-      return { ok: true, data: this.cachedToken.accessToken };
-    }
-    return this.acquireToken();
-  }
-
-  private async acquireToken(): Promise<CarrierResult<string>> {
-    const { clientId, clientSecret } = this.credentials;
-    this.logger?.info("acquiring token");
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    let response: Response;
-    try {
-      response = await this.fetchFn(this.tokenUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: "grant_type=client_credentials",
-        signal: controller.signal,
-      });
-    } catch (error: unknown) {
-      clearTimeout(timeoutId);
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return { ok: false, error: upsError("TIMEOUT", "token endpoint timeout", true) };
-      }
-      return { ok: false, error: upsError("AUTH", `token endpoint error: ${error instanceof Error ? error.message : String(error)}`) };
-    }
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return { ok: false, error: upsError("AUTH", `UPS auth token error (${response.status})`) };
-    }
-
-    let json: unknown;
-    try {
-      json = await response.json();
-    } catch {
-      return { ok: false, error: upsError("AUTH", "Failed to parse token response as JSON") };
-    }
-
-    const body = json as Record<string, unknown>;
-    const accessToken = body?.access_token;
-    if (typeof accessToken !== "string") {
-      return { ok: false, error: upsError("AUTH", "token response missing access_token") };
-    }
-
-    const rawExpiry = body.expires_in;
-    const expiresIn = typeof rawExpiry === "number" ? rawExpiry : parseInt(String(rawExpiry), 10) || 0;
-    this.cachedToken = {
-      accessToken,
-      expiresAt: Date.now() + Math.max(0, expiresIn - this.tokenExpiryBufferSeconds) * 1000,
-    };
-    this.logger?.info("token acquired", { expiresIn });
-
-    return { ok: true, data: accessToken };
   }
 
   private buildRequestBody(request: RateRequest): unknown {
