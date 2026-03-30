@@ -1,8 +1,9 @@
 import { RateRequestSchema, httpRequest } from "@pidgeon/core";
-import type { Address, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
+import type { CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
 import { upsError } from "./types.js";
 import type { UpsCredentials, UpsRateProviderConfig, UpsRatedShipment, UpsErrorEnvelope } from "./types.js";
 import { UpsTokenManager } from "./auth.js";
+import { buildUpsRateRequest } from "./request-builder.js";
 
 export type { FetchFn } from "@pidgeon/core";
 
@@ -60,7 +61,7 @@ export class UpsRateProvider {
     const tokenResult = await this.tokenManager.getToken();
     if (!tokenResult.ok) return tokenResult;
 
-    const requestBody = this.buildRequestBody(request);
+    const requestBody = buildUpsRateRequest(request, this.credentials.accountNumber);
 
     const clientConfig: import("@pidgeon/core").HttpClientConfig = {
       fetch: this.fetchFn,
@@ -180,80 +181,6 @@ export class UpsRateProvider {
     return { ok: true, data: quotes };
   }
 
-  private buildRequestBody(request: RateRequest): unknown {
-    return {
-      RateRequest: {
-        Request: {
-          RequestOption: "Shop",
-          SubVersion: "2108",
-        },
-        Shipment: {
-          Shipper: {
-            ShipperNumber: this.credentials.accountNumber,
-            Address: this.mapAddress(request.origin),
-          },
-          ShipTo: {
-            Address: this.mapAddress(request.destination),
-          },
-          ShipFrom: {
-            Address: this.mapAddress(request.origin),
-          },
-          PaymentDetails: {
-            ShipmentCharge: {
-              Type: "01",
-              BillShipper: {
-                AccountNumber: this.credentials.accountNumber,
-              },
-            },
-          },
-          DeliveryTimeInformation: {
-            PackageBillType: "03",
-          },
-          NumOfPieces: String(request.packages.length),
-          Package: request.packages.map((pkg) => ({
-            PackagingType: {
-              Code: "02",
-              Description: "Packaging",
-            },
-            Dimensions: {
-              UnitOfMeasurement: {
-                Code: this.mapDimensionUnit(pkg.dimensions.unit),
-              },
-              Length: String(pkg.dimensions.length),
-              Width: String(pkg.dimensions.width),
-              Height: String(pkg.dimensions.height),
-            },
-            PackageWeight: {
-              UnitOfMeasurement: {
-                Code: this.mapWeightUnit(pkg.weight.unit),
-              },
-              Weight: String(pkg.weight.value),
-            },
-          })),
-        },
-      },
-    };
-  }
-
-  private mapAddress(address: Address): unknown {
-    return {
-      AddressLine: address.street,
-      City: address.city,
-      StateProvinceCode: address.state,
-      PostalCode: address.postalCode,
-      CountryCode: address.countryCode,
-    };
-  }
-
-  private mapWeightUnit(unit: string): string {
-    const map: Record<string, string> = { lb: "LBS", kg: "KGS", oz: "OZS" };
-    return map[unit] ?? unit.toUpperCase();
-  }
-
-  private mapDimensionUnit(unit: string): string {
-    const map: Record<string, string> = { in: "IN", cm: "CM" };
-    return map[unit] ?? unit.toUpperCase();
-  }
 }
 
 // Compile-time check: UpsRateProvider structurally satisfies CarrierProvider
