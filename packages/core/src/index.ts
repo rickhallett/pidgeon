@@ -55,12 +55,28 @@ export type Logger = {
 
 export type CarrierResult<T> = Result<T, CarrierError>;
 
-export type CarrierProvider = {
+export type RateProvider = {
   getRates(request: RateRequest): Promise<CarrierResult<RateQuote[]>>;
-  createLabel?(request: unknown): Promise<CarrierResult<unknown>>;
-  validateAddress?(address: Address): Promise<CarrierResult<Address>>;
-  getTracking?(trackingNumber: string): Promise<CarrierResult<unknown>>;
 };
+
+export type LabelProvider = {
+  createLabel(request: unknown): Promise<CarrierResult<unknown>>;
+};
+
+export type AddressValidationProvider = {
+  validateAddress(address: Address): Promise<CarrierResult<Address>>;
+};
+
+export type TrackingProvider = {
+  getTracking(trackingNumber: string): Promise<CarrierResult<unknown>>;
+};
+
+/**
+ * A carrier that supports rating. This is the minimum required capability.
+ * Carriers may also implement LabelProvider, AddressValidationProvider,
+ * and/or TrackingProvider for additional operations.
+ */
+export type CarrierProvider = RateProvider;
 
 // --- Aggregated result ---
 
