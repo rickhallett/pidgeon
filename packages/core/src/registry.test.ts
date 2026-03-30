@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import type { CarrierProvider, CarrierResult, RateRequest, RateQuote } from "./index.js";
+import { CarrierRegistry } from "./registry.js";
 
 /**
  * BUILD_ORDER Step 11 — Multi-carrier extensibility.
@@ -239,5 +240,44 @@ describe("registry: multi-carrier getRates", () => {
     // 3 × 100ms sequential = 300ms. Concurrent should be ~100ms.
     // Allow generous margin but must be well under sequential time.
     expect(elapsed).toBeLessThan(250);
+  });
+});
+
+// --- Carrier descriptors ---
+
+describe("carrier descriptors", () => {
+  it("registers a carrier with capability metadata", () => {
+    const registry = new CarrierRegistry();
+    registry.register("ups", fakeProvider("UPS", 12.99), {
+      capabilities: ["rate"],
+    });
+
+    const info = registry.describe("ups");
+    expect(info).not.toBeNull();
+    expect(info!.capabilities).toEqual(["rate"]);
+  });
+
+  it("lists carriers with their capabilities", () => {
+    const registry = new CarrierRegistry();
+    registry.register("ups", fakeProvider("UPS", 12.99), {
+      capabilities: ["rate"],
+    });
+    registry.register("fedex", fakeProvider("FedEx", 10.99), {
+      capabilities: ["rate", "label", "tracking"],
+    });
+
+    const all = registry.descriptions();
+    expect(all).toHaveLength(2);
+    expect(all.find((d) => d.name === "ups")?.capabilities).toEqual(["rate"]);
+    expect(all.find((d) => d.name === "fedex")?.capabilities).toEqual(["rate", "label", "tracking"]);
+  });
+
+  it("defaults to rate-only when no descriptor provided", () => {
+    const registry = new CarrierRegistry();
+    registry.register("ups", fakeProvider("UPS", 12.99));
+
+    const info = registry.describe("ups");
+    expect(info).not.toBeNull();
+    expect(info!.capabilities).toEqual(["rate"]);
   });
 });

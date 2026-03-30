@@ -1,36 +1,58 @@
-import type { AggregatedRateResult, CarrierError, CarrierProvider, CarrierResult, RateRequest, Result } from "./index.js";
+import type { AggregatedRateResult, CarrierCapability, CarrierDescriptor, CarrierError, CarrierProvider, CarrierResult, RateRequest, Result } from "./index.js";
+
+type RegistryEntry = {
+  readonly provider: CarrierProvider;
+  readonly descriptor: CarrierDescriptor;
+};
 
 export class CarrierRegistry {
-  private readonly providers = new Map<string, CarrierProvider>();
+  private readonly entries = new Map<string, RegistryEntry>();
 
-  register(name: string, provider: CarrierProvider): void {
+  register(
+    name: string,
+    provider: CarrierProvider,
+    options?: { capabilities?: CarrierCapability[] },
+  ): void {
     const key = name.toLowerCase();
-    if (this.providers.has(key)) {
+    if (this.entries.has(key)) {
       throw new Error(`Carrier "${name}" is already registered`);
     }
-    this.providers.set(key, provider);
+    const descriptor: CarrierDescriptor = {
+      name: key,
+      capabilities: options?.capabilities ?? ["rate"],
+    };
+    this.entries.set(key, { provider, descriptor });
   }
 
   resolve(name: string): Result<CarrierProvider> {
-    const provider = this.providers.get(name.toLowerCase());
-    if (!provider) {
+    const entry = this.entries.get(name.toLowerCase());
+    if (!entry) {
       return { ok: false, error: `Unknown carrier: ${name}` };
     }
-    return { ok: true, data: provider };
+    return { ok: true, data: entry.provider };
   }
 
   carriers(): string[] {
-    return [...this.providers.keys()];
+    return [...this.entries.keys()];
+  }
+
+  describe(name: string): CarrierDescriptor | null {
+    const entry = this.entries.get(name.toLowerCase());
+    return entry?.descriptor ?? null;
+  }
+
+  descriptions(): CarrierDescriptor[] {
+    return [...this.entries.values()].map((e) => e.descriptor);
   }
 
   async getRatesFromAll(request: RateRequest): Promise<AggregatedRateResult> {
-    if (this.providers.size === 0) {
+    if (this.entries.size === 0) {
       return { ok: false, error: "No carriers registered", failures: [] };
     }
 
     const results = await Promise.all(
-      [...this.providers.entries()].map(([name, p]) =>
-        p.getRates(request).catch((err: unknown): CarrierResult<never> => ({
+      [...this.entries.entries()].map(([name, entry]) =>
+        entry.provider.getRates(request).catch((err: unknown): CarrierResult<never> => ({
           ok: false,
           error: { code: "UNKNOWN", message: String(err), carrier: name, retriable: false },
         })),

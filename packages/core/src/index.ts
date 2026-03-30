@@ -73,6 +73,13 @@ export type TrackingProvider = {
   getTracking(trackingNumber: string): Promise<CarrierResult<unknown>>;
 };
 
+export type CarrierCapability = "rate" | "label" | "addressValidation" | "tracking";
+
+export type CarrierDescriptor = {
+  readonly name: string;
+  readonly capabilities: readonly CarrierCapability[];
+};
+
 /**
  * A carrier that supports rating. This is the minimum required capability.
  * Carriers may also implement LabelProvider, AddressValidationProvider,
