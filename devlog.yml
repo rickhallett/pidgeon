@@ -346,23 +346,67 @@ decisions:
       the constructor defaults indirectly. A mismatch would surface as
       different behavior between "loaded from env" and "constructed in test."
 
+  - id: 022
+    date: 2026-03-30
+    title: Refactor toward shared-codebase readability
+    choice: >
+      Generalise HTTP transport layer, decompose UpsRateProvider into focused
+      units, split CarrierProvider into capability interfaces, tighten domain
+      names throughout.
+    alternatives:
+      - Leave current structure as-is (working, tested, but hard to reason about)
+      - Incremental per-finding fixes without coordinated restructuring
+    rationale: >
+      The spec asks for code suitable for active development in-house by a team.
+      The initial TDD approach optimised for speed to implementation — getting
+      the walking skeleton and feature slices working fast. The resulting code
+      works and is well-tested, but does not meet the standard for a shared
+      codebase: UpsRateProvider is a 300-line class that handles auth, request
+      building, response mapping, and HTTP orchestration — violating single
+      responsibility. CarrierProvider has a single getRates() method with no
+      path toward carriers that support labels, tracking, or address validation
+      without growing the same interface. Domain names are inconsistent (Result
+      vs CarrierResult, generic "request" in carrier-specific contexts). The
+      HTTP transport layer was extracted into core (D014) but still carries
+      UPS-specific assumptions (log labels, error message formats). These are
+      not bugs — they are readability and maintainability debts that compound
+      as the next engineer adds FedEx or DHL. Coordinated restructuring is
+      more effective than piecemeal fixes because the changes interact: splitting
+      CarrierProvider into capabilities affects how the registry aggregates,
+      which affects how the CLI dispatches.
+    scope: >
+      (1) HTTP transport: fix hardcoded log labels, add HTTP-date Retry-After
+      parsing, add token endpoint timeout, remove dead parseErrorBody.message
+      field. (2) UpsRateProvider decomposition: extract auth lifecycle, request
+      builder, and response mapper into standalone units that the provider
+      composes. (3) CarrierProvider capability interfaces: split into
+      RateProvider, LabelProvider?, TrackingProvider?, AddressValidator? so
+      carriers implement what they support. Registry inspects capabilities.
+      (4) Domain naming: audit and tighten type names, parameter names, and
+      error message templates for consistency and precision.
+    evidence: >
+      Three-family adversarial review findings (triage rounds 7–9) identified
+      specific instances. Bug triage confirmed 3 RED tests targeting transport
+      issues (B, D, I) and 3 RED tests targeting parseErrorBody dead code (C).
+      Operator review confirmed the aggregate pattern: individually defensible
+      shortcuts that collectively make the codebase harder to onboard into.
+
 deferred:
 
   - id: D001
     date: 2026-03-29
+    resolved: 2026-03-30
     title: Retry-After HTTP-date parsing
-    status: deferred
-    defer_to: future
+    status: resolved
     source:
       - claude
       - codex
-    rationale: >
-      Current implementation parses integer seconds only. Team assessment is
-      that UPS uses delta-seconds in practice, so HTTP-date support is a lower
-      priority compatibility improvement rather than a current correctness blocker.
-    follow_up_trigger: >
-      Revisit if UPS sends HTTP-date Retry-After values in the wild, or during
-      broader HTTP transport hardening.
+    resolution: >
+      Promoted from deferred to active scope under decision 022 (shared-codebase
+      readability refactor). Red test written in core/src/http.test.ts demanding
+      HTTP-date Retry-After parsing. Previously deferred because UPS uses
+      delta-seconds in practice, but the HTTP transport layer is now generic
+      (serves all carriers) and RFC 7231 compliance is the right default.
 
   - id: D002
     date: 2026-03-29
@@ -567,3 +611,44 @@ deferred:
       UPS rate provider refactored to delegate HTTP to core, keeping only
       carrier-specific auth, request building, and response parsing.
       rate.ts went from 468 lines to ~280 lines (132 lines removed).
+
+  - id: D015
+    date: 2026-03-30
+    title: Zod validation for UPS response parsing (output boundary)
+    status: deferred
+    defer_to: next carrier or response-shape bug
+    source:
+      - library-hindsight-reviewer
+    rationale: >
+      response-parser.ts uses `as` casts and 6 manual parseFloat/parseInt
+      calls each followed by NaN guards with hand-crafted error messages.
+      This is exactly the untrusted-boundary parsing Zod was adopted to
+      eliminate on the input side. A Zod schema for the UPS response envelope
+      would replace manual coercion with z.coerce.number(), provide precise
+      error paths on malformed responses, and match the z.infer derivation
+      pattern already established in core/schemas.ts. Currently mitigated by
+      25+ tests in response-normalization.test.ts and rate-errors.test.ts,
+      but the test surface is large precisely because the parser validates
+      manually. Adding a second carrier would double the unvalidated surface.
+    follow_up_trigger: >
+      Revisit when adding FedEx/DHL (where response parsing bugs become more
+      likely) or if a UPS response shape change causes a cryptic TypeError
+      instead of a structured validation error.
+
+  - id: D016
+    date: 2026-03-30
+    title: Extract shared test fixtures and fake-fetch builders
+    status: deferred
+    defer_to: next domain model change
+    source:
+      - library-hindsight-reviewer
+    rationale: >
+      DOMESTIC_REQUEST appears in 7 test files, MINIMAL_UPS_RESPONSE in 4,
+      and makeProvider() in 5 — with identical signatures. Not yet causing
+      bugs, but a domain model change (e.g. adding a required field to
+      RateRequest) would require updating all of them. Extracting into a
+      shared test-helpers module would reduce this. Combines naturally with
+      D008 (FetchFn cleanup in tests).
+    follow_up_trigger: >
+      Revisit when RateRequest or RateQuote gains or removes a required field,
+      or when D008 is addressed.
