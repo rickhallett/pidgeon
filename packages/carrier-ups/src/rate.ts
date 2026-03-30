@@ -1,38 +1,9 @@
 import { RateRequestSchema, httpRequest } from "@pidgeon/core";
-import type { Address, CarrierError, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
+import type { Address, CarrierProvider, CarrierResult, Logger, RateRequest, RateQuote, FetchFn, ErrorBodyParser } from "@pidgeon/core";
+import { upsError } from "./types.js";
+import type { UpsCredentials, UpsRateProviderConfig, UpsRatedShipment, UpsErrorEnvelope } from "./types.js";
 
 export type { FetchFn } from "@pidgeon/core";
-
-type UpsCredentials = {
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly accountNumber: string;
-};
-
-type RetryConfig = {
-  readonly maxAttempts: number;
-  readonly baseDelayMs: number;
-  readonly timeoutMs: number;
-  readonly maxRetryAfterSeconds: number;
-};
-
-type UrlConfig = {
-  readonly rating: string;
-  readonly token: string;
-};
-
-type UpsRateProviderConfig = {
-  readonly fetch: FetchFn;
-  readonly credentials: UpsCredentials;
-  readonly retry?: RetryConfig;
-  readonly urls?: UrlConfig;
-  readonly tokenExpiryBufferSeconds?: number;
-  readonly logger?: Logger;
-};
-
-function upsError(code: CarrierError['code'], message: string, retriable = false): CarrierError {
-  return { code, message, carrier: "UPS", retriable };
-}
 
 const upsErrorBodyParser: ErrorBodyParser = (_status: number, body: unknown): string | null => {
   const envelope = body as UpsErrorEnvelope | null;
@@ -344,47 +315,3 @@ export class UpsRateProvider {
 // Compile-time check: UpsRateProvider structurally satisfies CarrierProvider
 null! as UpsRateProvider satisfies CarrierProvider;
 
-// --- UPS response types (minimal, shaped by the test fixture) ---
-
-type UpsRatedShipment = {
-  Service: { Code: string };
-  BillingWeight: {
-    UnitOfMeasurement: { Code: string };
-    Weight: string;
-  };
-  TotalCharges: {
-    CurrencyCode: string;
-    MonetaryValue: string;
-  };
-  RatedPackage: UpsRatedPackage[];
-  TimeInTransit: {
-    ServiceSummary: {
-      Service: { Description: string };
-      EstimatedArrival: {
-        Arrival?: {
-          Date?: string;
-          Time?: string;
-        };
-        BusinessDaysInTransit: string;
-      };
-      GuaranteedIndicator?: string;
-    };
-  };
-};
-
-type UpsRatedPackage = {
-  ItemizedCharges?: UpsItemizedCharge[];
-};
-
-type UpsItemizedCharge = {
-  Code: string;
-  CurrencyCode: string;
-  MonetaryValue: string;
-  SubType: string;
-};
-
-type UpsErrorEnvelope = {
-  response?: {
-    errors?: Array<{ code: string; message: string }>;
-  };
-};
